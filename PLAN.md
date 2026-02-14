@@ -88,3 +88,13 @@ considered:
 The gatekeeper approach is the known-good option. The ratchet should
 check that the bypass prevention is in place and tell the user how to
 set it up if missing.
+
+## Future Work
+
+- Host a formal JSON Schema for `.test-status.json` on GitHub Pages at `tdd-ratchet.maxeonyx.com`
+- Switch from `cargo test` stdout regex parsing to `cargo nextest` structured output (JUnit XML or libtest JSON). Nextest can be required — no need to support both. This would replace `src/runner.rs` entirely.
+- Refactor main pipeline into clean three-phase architecture:
+  1. **Gather** — load status file from disk, run tests, walk git history snapshots. All inputs collected upfront.
+  2. **Logic** — pure function over all gathered data. Applies ratchet rules AND history rules together. Produces updated status file + violations list.
+  3. **Output** — always save updated status file (valid transitions apply even when there are violations), then report violations and exit non-zero if any.
+  Currently the phases are interleaved: ratchet logic runs, then history is checked separately, and the status file is only saved if everything passes. This means valid state transitions (e.g. new pending tests) are lost on any violation.
