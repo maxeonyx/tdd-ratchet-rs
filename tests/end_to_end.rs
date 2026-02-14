@@ -111,6 +111,23 @@ fn run_ratchet_init(dir: &Path) -> (bool, String) {
     (output.status.success(), out)
 }
 
+/// Add the gatekeeper test to a test project. Must be called before the
+/// first `run_ratchet()` — the ratchet requires the gatekeeper to be present.
+fn add_gatekeeper(dir: &Path) {
+    fs::write(
+        dir.join("tests/gatekeeper.rs"),
+        r#"
+#[test]
+fn tdd_ratchet_gatekeeper() {
+    if std::env::var("TDD_RATCHET").is_err() {
+        panic!("Run tdd-ratchet instead of cargo test.");
+    }
+}
+"#,
+    )
+    .unwrap();
+}
+
 #[test]
 fn init_creates_empty_status_file() {
     build_ratchet_binary();
@@ -134,6 +151,7 @@ fn happy_path_tdd_workflow() {
     // Step 1: Init ratchet
     let (ok, out) = run_ratchet_init(dir.path());
     assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Add ratchet status file");
 
     // Step 2: Add a FAILING test
@@ -179,6 +197,7 @@ fn rejects_test_that_passes_immediately() {
 
     let (ok, _) = run_ratchet_init(dir.path());
     assert!(ok);
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Init ratchet");
 
     // Add a test that passes immediately
@@ -212,6 +231,7 @@ fn rejects_regression() {
 
     let (ok, _) = run_ratchet_init(dir.path());
     assert!(ok);
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Init ratchet");
 
     // Add failing test
@@ -271,6 +291,7 @@ fn rejects_disappeared_test() {
 
     let (ok, _) = run_ratchet_init(dir.path());
     assert!(ok);
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Init ratchet");
 
     // Add and complete a test through the full cycle
@@ -320,10 +341,12 @@ fn zero_tests_project_succeeds() {
 
     let (ok, out) = run_ratchet_init(dir.path());
     assert!(ok, "Init should succeed: {out}");
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Init ratchet");
 
+    // Only the gatekeeper test exists — should succeed
     let (ok, out) = run_ratchet(dir.path());
-    assert!(ok, "Ratchet should succeed with zero tests: {out}");
+    assert!(ok, "Ratchet should succeed with only gatekeeper: {out}");
 }
 
 #[test]
@@ -334,6 +357,7 @@ fn two_new_tests_one_passes_one_fails() {
 
     let (ok, _) = run_ratchet_init(dir.path());
     assert!(ok);
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Init ratchet");
 
     // Add two tests in same commit — one fails, one passes
@@ -376,6 +400,7 @@ fn rejects_bad_git_history_skipped_pending() {
     // Init ratchet
     let (ok, out) = run_ratchet_init(dir.path());
     assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
     git_add_commit(dir.path(), "Init ratchet");
 
     // Manually write the status file with a test marked as "passing"
@@ -395,7 +420,8 @@ fn sneaky_test() {
         dir.path().join(".test-status.json"),
         r#"{
   "tests": {
-    "sneaky_test": "passing"
+    "sneaky_test": "passing",
+    "tdd_ratchet_gatekeeper": "passing"
   }
 }
 "#,
@@ -439,6 +465,20 @@ fn legacy_test() {
     // Now adopt tdd-ratchet
     let (ok, out) = run_ratchet_init(dir.path());
     assert!(ok, "init should succeed: {out}");
+
+    // Add gatekeeper test (required by tdd-ratchet)
+    fs::write(
+        dir.path().join("tests/gatekeeper.rs"),
+        r#"
+#[test]
+fn tdd_ratchet_gatekeeper() {
+    if std::env::var("TDD_RATCHET").is_err() {
+        panic!("Run tdd-ratchet instead of cargo test.");
+    }
+}
+"#,
+    )
+    .unwrap();
     git_add_commit(dir.path(), "Adopt tdd-ratchet");
 
     // Run ratchet — legacy_test passes immediately but should be

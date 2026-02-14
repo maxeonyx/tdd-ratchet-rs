@@ -4,7 +4,7 @@ use std::process::{self, Command};
 
 use tdd_ratchet::errors::{format_history_violation, format_violation};
 use tdd_ratchet::history::check_history;
-use tdd_ratchet::ratchet::check_ratchet;
+use tdd_ratchet::ratchet::{check_ratchet, GATEKEEPER_TEST_NAME};
 use tdd_ratchet::runner::parse_cargo_test_output;
 use tdd_ratchet::status::StatusFile;
 
@@ -38,11 +38,48 @@ fn init(status_path: &PathBuf, project_dir: &PathBuf) {
 
     let mut status = StatusFile::empty();
     status.baseline = baseline;
+
+    // Run tests and snapshot existing results into the status file
+    let output = Command::new("cargo")
+        .args(["test", "--no-fail-fast"])
+        .current_dir(project_dir)
+        .env("TDD_RATCHET", "1")
+        .output()
+        .ok();
+
+    if let Some(output) = output {
+        let combined = String::from_utf8_lossy(&output.stdout).to_string()
+            + &String::from_utf8_lossy(&output.stderr);
+        let results = parse_cargo_test_output(&combined);
+        for result in &results {
+            if result.outcome == tdd_ratchet::runner::TestOutcome::Ignored {
+                continue;
+            }
+            let state = match result.outcome {
+                tdd_ratchet::runner::TestOutcome::Passed => tdd_ratchet::status::TestState::Passing,
+                tdd_ratchet::runner::TestOutcome::Failed => tdd_ratchet::status::TestState::Pending,
+                tdd_ratchet::runner::TestOutcome::Ignored => unreachable!(),
+            };
+            status.tests.insert(result.name.clone(), state);
+        }
+    }
+
     status.save(status_path).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to create status file: {e}");
         process::exit(1);
     });
-    println!("tdd-ratchet: initialized .test-status.json");
+
+    let passing = status
+        .tests
+        .values()
+        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Passing))
+        .count();
+    let pending = status
+        .tests
+        .values()
+        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Pending))
+        .count();
+    println!("tdd-ratchet: initialized .test-status.json ({passing} passing, {pending} pending)");
 }
 
 fn get_head_commit(project_dir: &PathBuf) -> Option<String> {
@@ -89,6 +126,32 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
 
     // Parse test results
     let results = parse_cargo_test_output(&combined);
+
+    // Check that the gatekeeper test is present
+    let has_gatekeeper = results
+        .iter()
+        .any(|r| r.name.ends_with(GATEKEEPER_TEST_NAME));
+    if !has_gatekeeper {
+        eprintln!(
+            "tdd-ratchet: no gatekeeper test found.\n\
+             \n\
+             Add a test named `{GATEKEEPER_TEST_NAME}` to your project to prevent\n\
+             `cargo test` from being run directly (bypassing the ratchet).\n\
+             \n\
+             Example (add to tests/gatekeeper.rs):\n\
+             \n\
+             #[test]\n\
+             fn {GATEKEEPER_TEST_NAME}() {{\n\
+                 if std::env::var(\"TDD_RATCHET\").is_err() {{\n\
+                     panic!(\n\
+                         \"This project uses tdd-ratchet for strict TDD.\\n\\\n\
+                          Run `tdd-ratchet` instead of `cargo test`.\"\n\
+                     );\n\
+                 }}\n\
+             }}"
+        );
+        process::exit(1);
+    }
 
     // Apply ratchet rules
     let outcome = check_ratchet(&status, &results);
