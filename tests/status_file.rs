@@ -1,23 +1,106 @@
 // tests/status_file.rs
 //
 // Story 4: Committed status file tracking each test's expected state.
-//
-// The `.test-status.json` file is the ratchet's persistent state. It
-// maps test names to their expected state (`pending` or `passing`).
-// The ratchet reads it, compares against actual results, and updates it.
-//
-// Isolation: temp dirs for all file operations.
-//
-// Test cases:
-// - Empty status file (no tests tracked) → valid, parses to empty map
-// - Status file with pending and passing tests → loads correctly
-// - Ratchet updates status file: new failing test → added as pending
-// - Ratchet updates status file: pending test now passes → promoted
-// - Round-trip: write then read → identical
-//
-// Edge cases:
-// - Status file doesn't exist → created on first run (with --init or
-//   automatically — define policy)
-// - Status file is malformed JSON → clear error with line info
-// - Status file has unknown fields → ignored (forward compatibility)
-// - Test name with special characters (colons, spaces) → handled
+
+use std::collections::BTreeMap;
+use std::fs;
+use tdd_ratchet::status::{StatusFile, TestState};
+use tempfile::TempDir;
+
+fn make_status(tests: &[(&str, TestState)]) -> StatusFile {
+    let mut map = BTreeMap::new();
+    for (name, state) in tests {
+        map.insert(name.to_string(), *state);
+    }
+    StatusFile { tests: map }
+}
+
+#[test]
+fn empty_status_file_parses_to_empty_map() {
+    let json = r#"{"tests":{}}"#;
+    let status: StatusFile = serde_json::from_str(json).unwrap();
+    assert!(status.tests.is_empty());
+}
+
+#[test]
+fn status_file_with_pending_and_passing_loads_correctly() {
+    let json = r#"{"tests":{"mod::test_a":"passing","mod::test_b":"pending"}}"#;
+    let status: StatusFile = serde_json::from_str(json).unwrap();
+    assert_eq!(status.tests["mod::test_a"], TestState::Passing);
+    assert_eq!(status.tests["mod::test_b"], TestState::Pending);
+}
+
+#[test]
+fn round_trip_write_then_read() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(".test-status.json");
+
+    let original = make_status(&[
+        ("test_one", TestState::Passing),
+        ("test_two", TestState::Pending),
+    ]);
+
+    original.save(&path).unwrap();
+    let loaded = StatusFile::load(&path).unwrap();
+
+    assert_eq!(original, loaded);
+}
+
+#[test]
+fn status_file_does_not_exist_returns_error() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(".test-status.json");
+    let result = StatusFile::load(&path);
+    assert!(result.is_err());
+}
+
+#[test]
+fn malformed_json_returns_clear_error() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(".test-status.json");
+    fs::write(&path, "{ not valid json }").unwrap();
+
+    let result = StatusFile::load(&path);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("parse") || err.contains("JSON") || err.contains("json"),
+        "Error should mention parsing: {err}"
+    );
+}
+
+#[test]
+fn unknown_fields_are_ignored() {
+    let json = r#"{"tests":{"a":"passing"},"future_field":"whatever"}"#;
+    let status: StatusFile = serde_json::from_str(json).unwrap();
+    assert_eq!(status.tests.len(), 1);
+}
+
+#[test]
+fn test_name_with_special_characters() {
+    let json = r#"{"tests":{"mod::sub::test with spaces & colons: yes":"pending"}}"#;
+    let status: StatusFile = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        status.tests["mod::sub::test with spaces & colons: yes"],
+        TestState::Pending
+    );
+}
+
+#[test]
+fn saved_file_is_human_readable_json() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(".test-status.json");
+
+    let status = make_status(&[
+        ("b_test", TestState::Pending),
+        ("a_test", TestState::Passing),
+    ]);
+    status.save(&path).unwrap();
+
+    let contents = fs::read_to_string(&path).unwrap();
+    // Should be pretty-printed (contains newlines) and sorted (a before b)
+    assert!(contents.contains('\n'), "Should be pretty-printed");
+    let a_pos = contents.find("a_test").unwrap();
+    let b_pos = contents.find("b_test").unwrap();
+    assert!(a_pos < b_pos, "Tests should be sorted alphabetically");
+}
