@@ -2,10 +2,12 @@
 //
 // Story 8: `cargo test` run directly should fail with instructions.
 
+mod common;
+
+use common::TestDir;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tempfile::TempDir;
 
 /// Create a minimal Rust project in a temp dir with a gatekeeper test.
 fn create_project_with_gatekeeper(dir: &Path) {
@@ -58,7 +60,7 @@ fn something_useful() {
 
 #[test]
 fn cargo_test_without_ratchet_env_fails_with_instructions() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_project_with_gatekeeper(dir.path());
 
     let output = Command::new("cargo")
@@ -80,11 +82,12 @@ fn cargo_test_without_ratchet_env_fails_with_instructions() {
         stderr.contains("tdd-ratchet") || stderr.contains("cargo ratchet"),
         "Output should mention tdd-ratchet: {stderr}"
     );
+    dir.pass();
 }
 
 #[test]
 fn cargo_test_with_ratchet_env_passes_gatekeeper() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_project_with_gatekeeper(dir.path());
 
     let output = Command::new("cargo")
@@ -101,4 +104,5 @@ fn cargo_test_with_ratchet_env_passes_gatekeeper() {
         "cargo test should pass with TDD_RATCHET=1: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    dir.pass();
 }

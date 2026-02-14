@@ -2,10 +2,12 @@
 //
 // Story 5 (enforcement): Verify via git history that no test skipped pending state.
 
+mod common;
+
+use common::TestDir;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tempfile::TempDir;
 
 use tdd_ratchet::history::{check_history, HistoryViolation};
 
@@ -42,7 +44,7 @@ fn commit(dir: &Path, msg: &str) {
 
 #[test]
 fn test_appeared_as_pending_then_passing_is_ok() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     init_repo(dir.path());
 
     // Commit 1: test appears as pending
@@ -55,11 +57,12 @@ fn test_appeared_as_pending_then_passing_is_ok() {
 
     let violations = check_history(dir.path(), None).unwrap();
     assert!(violations.is_empty(), "Should be ok: {violations:?}");
+    dir.pass();
 }
 
 #[test]
 fn test_appeared_as_passing_without_pending_is_rejected() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     init_repo(dir.path());
 
     // Commit 1: no status file
@@ -77,11 +80,12 @@ fn test_appeared_as_passing_without_pending_is_rejected() {
         ),
         "Should reject: {violations:?}"
     );
+    dir.pass();
 }
 
 #[test]
 fn test_pending_for_multiple_commits_then_passing_is_ok() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     init_repo(dir.path());
 
     write_status(dir.path(), r#"{"tests":{"slow_test":"pending"}}"#);
@@ -96,11 +100,12 @@ fn test_pending_for_multiple_commits_then_passing_is_ok() {
 
     let violations = check_history(dir.path(), None).unwrap();
     assert!(violations.is_empty(), "Should be ok: {violations:?}");
+    dir.pass();
 }
 
 #[test]
 fn baseline_commit_grandfathers_existing_tests() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     init_repo(dir.path());
 
     // Commit 1: test appears as passing (before baseline)
@@ -138,11 +143,12 @@ fn baseline_commit_grandfathers_existing_tests() {
         ),
         "new_cheater should be flagged: {violations:?}"
     );
+    dir.pass();
 }
 
 #[test]
 fn no_status_file_in_history_is_ok() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     init_repo(dir.path());
 
     fs::write(dir.path().join("README.md"), "hello").unwrap();
@@ -150,4 +156,5 @@ fn no_status_file_in_history_is_ok() {
 
     let violations = check_history(dir.path(), None).unwrap();
     assert!(violations.is_empty());
+    dir.pass();
 }
