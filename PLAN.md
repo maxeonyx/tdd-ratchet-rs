@@ -17,7 +17,7 @@
 
 ### Developer stories
 10. ~~As a developer of tdd-ratchet, I want `git clone` + `{rust toolchain}` to give me a working dev environment.~~ ✅
-11. As a developer of tdd-ratchet, I want CI to run the ratchet's own tests.
+11. ~~As a developer of tdd-ratchet, I want CI to run the ratchet's own tests.~~ ✅
 
 ## State Machine
 
