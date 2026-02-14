@@ -3,20 +3,20 @@
 ## Stories
 
 ### Big story
-1. As a user of tdd-ratchet, I want my Rust project to enforce strict TDD — new tests must fail before they can pass, verified by git history.
+1. ~~As a user of tdd-ratchet, I want my Rust project to enforce strict TDD — new tests must fail before they can pass, verified by git history.~~ ✅
 
 ### User stories
-2. As a user of tdd-ratchet, I want easy installation into my Rust project.
-3. As a user of tdd-ratchet, I want the ratchet to be transparent — I control my test harness naturally and the ratchet wraps it without getting in the way.
-4. As a user of tdd-ratchet, I want a committed status file tracking each test's expected state (`pending` or `passing`).
-5. As a user of tdd-ratchet, I want new tests rejected if they pass on their first appearance — they must be `pending` in a prior commit, verified by git history.
-6. As a user of tdd-ratchet, I want tests in `passing` state that now fail to fail the ratchet.
-7. As a user of tdd-ratchet, I want the ratchet to fail if a tracked test disappears from the run.
-8. As a user of tdd-ratchet, I want `cargo test` run directly (bypassing the ratchet) to fail with instructions. The gatekeeper-test-with-env-var is one approach; there may be better ones.
-9. As a user of tdd-ratchet, I want ratchet-specific failures to explain the context (this project uses strict TDD via tdd-ratchet), what the problem is, and what to do about it.
+2. ~~As a user of tdd-ratchet, I want easy installation into my Rust project.~~ ✅
+3. ~~As a user of tdd-ratchet, I want the ratchet to be transparent — I control my test harness naturally and the ratchet wraps it without getting in the way.~~ ✅
+4. ~~As a user of tdd-ratchet, I want a committed status file tracking each test's expected state (`pending` or `passing`).~~ ✅
+5. ~~As a user of tdd-ratchet, I want new tests rejected if they pass on their first appearance — they must be `pending` in a prior commit, verified by git history.~~ ✅
+6. ~~As a user of tdd-ratchet, I want tests in `passing` state that now fail to fail the ratchet.~~ ✅
+7. ~~As a user of tdd-ratchet, I want the ratchet to fail if a tracked test disappears from the run.~~ ✅
+8. ~~As a user of tdd-ratchet, I want `cargo test` run directly (bypassing the ratchet) to fail with instructions. The gatekeeper-test-with-env-var is one approach; there may be better ones.~~ ✅
+9. ~~As a user of tdd-ratchet, I want ratchet-specific failures to explain the context (this project uses strict TDD via tdd-ratchet), what the problem is, and what to do about it.~~ ✅
 
 ### Developer stories
-10. As a developer of tdd-ratchet, I want `git clone` + `{rust toolchain}` to give me a working dev environment.
+10. ~~As a developer of tdd-ratchet, I want `git clone` + `{rust toolchain}` to give me a working dev environment.~~ ✅
 11. As a developer of tdd-ratchet, I want CI to run the ratchet's own tests.
 
 ## State Machine
