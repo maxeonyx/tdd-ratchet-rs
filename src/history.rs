@@ -1,5 +1,6 @@
 // Git history inspection: verify no test skipped the pending state.
 
+use crate::ratchet::GATEKEEPER_TEST_NAME;
 use crate::status::StatusFile;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -57,16 +58,28 @@ pub fn check_history(
     let mut first_seen: BTreeMap<String, (String, crate::status::TestState)> = BTreeMap::new();
     let mut violations = Vec::new();
 
+    // The first snapshot is the grandfathered set — but only when a baseline
+    // is configured. Tests that existed when the ratchet was initialized are
+    // allowed to appear as passing without a prior pending state. When there's
+    // no baseline (new project), nothing is grandfathered.
+    let first_snapshot_commit = if baseline.is_some() {
+        snapshots.first().map(|(hash, _)| hash.clone())
+    } else {
+        None
+    };
+
     for (commit_hash, sf) in &snapshots {
         for (test_name, state) in &sf.tests {
             if !first_seen.contains_key(test_name) {
                 first_seen.insert(test_name.clone(), (commit_hash.clone(), *state));
                 // If a test's first appearance is "passing", that's a violation
-                // (unless it was in the baseline commit — those are grandfathered)
+                // (unless it was in the first snapshot — those are grandfathered)
                 if *state == crate::status::TestState::Passing {
-                    let is_baseline_commit =
-                        baseline_oid.is_some_and(|b| commit_hash == &b.to_string());
-                    if !is_baseline_commit {
+                    let is_grandfathered = first_snapshot_commit
+                        .as_ref()
+                        .is_some_and(|first| commit_hash == first);
+                    let is_gatekeeper = test_name.ends_with(GATEKEEPER_TEST_NAME);
+                    if !is_grandfathered && !is_gatekeeper {
                         violations.push(HistoryViolation::SkippedPending {
                             test: test_name.clone(),
                             commit: commit_hash.clone(),

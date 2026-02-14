@@ -1,6 +1,6 @@
 {
   "tests": {
-    "adoption_existing_project_grandfathers_tests": "pending",
+    "adoption_existing_project_grandfathers_tests": "passing",
     "all_violation_variants_are_covered": "passing",
     "baseline_commit_grandfathers_existing_tests": "passing",
     "cargo_test_with_ratchet_env_passes_gatekeeper": "passing",
@@ -10,7 +10,7 @@
     "empty_status_all_tests_fail_all_accepted_as_pending": "passing",
     "empty_status_all_tests_pass_all_rejected": "passing",
     "empty_status_file_parses_to_empty_map": "passing",
-    "full_setup_and_tdd_workflow_from_scratch": "pending",
+    "full_setup_and_tdd_workflow_from_scratch": "passing",
     "happy_path_tdd_workflow": "passing",
     "ignored_tests_are_not_counted_as_disappeared": "passing",
     "ignored_tests_are_tracked_as_ignored": "passing",
@@ -50,5 +50,5 @@
     "unknown_fields_are_ignored": "passing",
     "zero_tests_project_succeeds": "passing"
   },
-  "baseline": "c2ba31f1efac31f2e8333ec20a9f8bce18854eb9"
+  "baseline": "4ca905b5d503a9db21d1f3cf08ed53a29ff910ae"
 }

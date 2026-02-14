@@ -4,6 +4,11 @@ use crate::runner::{TestOutcome, TestResult};
 use crate::status::{StatusFile, TestState};
 use std::collections::BTreeSet;
 
+/// The gatekeeper test name. This test is special-cased: it's allowed to
+/// pass immediately without going through the pending state, because the
+/// ratchet itself sets TDD_RATCHET=1 when running tests.
+pub const GATEKEEPER_TEST_NAME: &str = "tdd_ratchet_gatekeeper";
+
 #[derive(Debug, Clone)]
 pub struct RatchetOutcome {
     pub violations: Vec<RatchetViolation>,
@@ -37,9 +42,18 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
                     .insert(result.name.clone(), TestState::Pending);
             }
             (None, TestOutcome::Passed) => {
-                violations.push(RatchetViolation::NewTestPassed {
-                    test: result.name.clone(),
-                });
+                if result.name.ends_with(GATEKEEPER_TEST_NAME) {
+                    // Gatekeeper is allowed to pass immediately — it can
+                    // never go through pending because the ratchet sets
+                    // TDD_RATCHET=1 before running tests.
+                    updated
+                        .tests
+                        .insert(result.name.clone(), TestState::Passing);
+                } else {
+                    violations.push(RatchetViolation::NewTestPassed {
+                        test: result.name.clone(),
+                    });
+                }
             }
             (None, TestOutcome::Ignored) => {
                 // New ignored test — nothing to track yet
