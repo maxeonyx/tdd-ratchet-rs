@@ -1,5 +1,6 @@
 // Error formatting: each ratchet violation gets context, problem, and suggestion.
 
+use crate::history::HistoryViolation;
 use crate::ratchet::RatchetViolation;
 
 /// Format a ratchet violation into a user-facing error message.
@@ -29,6 +30,20 @@ pub fn format_violation(violation: &RatchetViolation) -> String {
                 "tdd-ratchet: tracked test `{test}` is missing from the test run.\n\
                  A test in .test-status.json disappeared without being removed from the status file.\n\
                  If you removed the test intentionally, also remove it from .test-status.json in the same commit."
+            )
+        }
+    }
+}
+
+/// Format a history violation into a user-facing error message.
+pub fn format_history_violation(violation: &HistoryViolation) -> String {
+    match violation {
+        HistoryViolation::SkippedPending { test, commit } => {
+            let short = &commit[..8.min(commit.len())];
+            format!(
+                "tdd-ratchet: test `{test}` appeared as passing in commit {short} without a prior pending state.\n\
+                 Git history shows this test skipped the TDD workflow (fail first, then pass).\n\
+                 Rebase to split the offending commit: add the test as failing in one commit, then make it pass in the next."
             )
         }
     }

@@ -2,7 +2,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process::{self, Command};
 
-use tdd_ratchet::errors::format_violation;
+use tdd_ratchet::errors::{format_history_violation, format_violation};
+use tdd_ratchet::history::check_history;
 use tdd_ratchet::ratchet::check_ratchet;
 use tdd_ratchet::runner::parse_cargo_test_output;
 use tdd_ratchet::status::StatusFile;
@@ -80,6 +81,25 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
             eprintln!("tdd-ratchet: failed to save status file: {e}");
             process::exit(1);
         });
+
+        // Check git history for TDD violations
+        let history_violations = check_history(project_dir, None).unwrap_or_else(|e| {
+            eprintln!("tdd-ratchet: failed to inspect git history: {e}");
+            process::exit(1);
+        });
+
+        if !history_violations.is_empty() {
+            eprintln!();
+            for v in &history_violations {
+                eprintln!("{}", format_history_violation(v));
+                eprintln!();
+            }
+            eprintln!(
+                "tdd-ratchet: {} history violation(s) found.",
+                history_violations.len()
+            );
+            process::exit(1);
+        }
 
         let pending_count = outcome
             .updated
