@@ -75,7 +75,7 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
 
     // Run cargo test with TDD_RATCHET=1
     let output = Command::new("cargo")
-        .args(["test"])
+        .args(["test", "--no-fail-fast"])
         .current_dir(project_dir)
         .env("TDD_RATCHET", "1")
         .output()

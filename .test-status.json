@@ -1,5 +1,6 @@
 {
   "tests": {
+    "adoption_existing_project_grandfathers_tests": "pending",
     "all_violation_variants_are_covered": "passing",
     "baseline_commit_grandfathers_existing_tests": "passing",
     "cargo_test_with_ratchet_env_passes_gatekeeper": "passing",
@@ -9,6 +10,7 @@
     "empty_status_all_tests_fail_all_accepted_as_pending": "passing",
     "empty_status_all_tests_pass_all_rejected": "passing",
     "empty_status_file_parses_to_empty_map": "passing",
+    "full_setup_and_tdd_workflow_from_scratch": "pending",
     "happy_path_tdd_workflow": "passing",
     "ignored_tests_are_not_counted_as_disappeared": "passing",
     "ignored_tests_are_tracked_as_ignored": "passing",
@@ -29,6 +31,7 @@
     "pending_test_still_failing_is_ok": "passing",
     "pending_test_that_now_passes_is_promoted": "passing",
     "regression_error_has_context_problem_suggestion": "passing",
+    "rejects_bad_git_history_skipped_pending": "passing",
     "rejects_disappeared_test": "passing",
     "rejects_regression": "passing",
     "rejects_test_that_passes_immediately": "passing",
@@ -47,5 +50,5 @@
     "unknown_fields_are_ignored": "passing",
     "zero_tests_project_succeeds": "passing"
   },
-  "baseline": "cf15e52b1af0558c8f8cf55f8576102e70c47bb8"
+  "baseline": "c2ba31f1efac31f2e8333ec20a9f8bce18854eb9"
 }
