@@ -2,9 +2,9 @@ use std::env;
 use std::path::PathBuf;
 use std::process::{self, Command};
 
-use tdd_ratchet::errors::{format_history_violation, format_violation};
-use tdd_ratchet::history::check_history;
-use tdd_ratchet::ratchet::{check_ratchet, GATEKEEPER_TEST_NAME};
+use tdd_ratchet::errors::format_eval_violation;
+use tdd_ratchet::history::collect_history_snapshots;
+use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::parse_cargo_test_output;
 use tdd_ratchet::status::StatusFile;
 
@@ -33,7 +33,6 @@ fn init(status_path: &PathBuf, project_dir: &PathBuf) {
         process::exit(1);
     }
 
-    // Record current HEAD as baseline for grandfathering existing tests
     let baseline = get_head_commit(project_dir);
 
     let mut status = StatusFile::empty();
@@ -96,7 +95,7 @@ fn get_head_commit(project_dir: &PathBuf) -> Option<String> {
 }
 
 fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
-    // Load status file
+    // ── Phase 1: Gather ─────────────────────────────────────────────
     let status = if status_path.exists() {
         StatusFile::load(status_path).unwrap_or_else(|e| {
             eprintln!("tdd-ratchet: {e}");
@@ -110,7 +109,6 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
         process::exit(1);
     };
 
-    // Run cargo test with TDD_RATCHET=1
     let output = Command::new("cargo")
         .args(["test", "--no-fail-fast"])
         .current_dir(project_dir)
@@ -124,78 +122,40 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
     let combined = String::from_utf8_lossy(&output.stdout).to_string()
         + &String::from_utf8_lossy(&output.stderr);
 
-    // Parse test results
     let results = parse_cargo_test_output(&combined);
 
-    // Check that the gatekeeper test is present
-    let has_gatekeeper = results
-        .iter()
-        .any(|r| r.name.ends_with(GATEKEEPER_TEST_NAME));
-    if !has_gatekeeper {
-        eprintln!(
-            "tdd-ratchet: no gatekeeper test found.\n\
-             \n\
-             Add a test named `{GATEKEEPER_TEST_NAME}` to your project to prevent\n\
-             `cargo test` from being run directly (bypassing the ratchet).\n\
-             \n\
-             Example (add to tests/gatekeeper.rs):\n\
-             \n\
-             #[test]\n\
-             fn {GATEKEEPER_TEST_NAME}() {{\n\
-                 if std::env::var(\"TDD_RATCHET\").is_err() {{\n\
-                     panic!(\n\
-                         \"This project uses tdd-ratchet for strict TDD.\\n\\\n\
-                          Run `tdd-ratchet` instead of `cargo test`.\"\n\
-                     );\n\
-                 }}\n\
-             }}"
-        );
+    let baseline = status.baseline.as_deref();
+    let history_snapshots = collect_history_snapshots(project_dir, baseline).unwrap_or_else(|e| {
+        eprintln!("tdd-ratchet: failed to inspect git history: {e}");
         process::exit(1);
-    }
+    });
 
-    // Apply ratchet rules
-    let outcome = check_ratchet(&status, &results);
+    // ── Phase 2: Evaluate (pure) ────────────────────────────────────
+    let result = evaluate(&status, &results, &history_snapshots);
 
-    if outcome.violations.is_empty() {
-        // Check git history for TDD violations BEFORE saving
-        let baseline = outcome.updated.baseline.as_deref();
-        let history_violations = check_history(project_dir, baseline).unwrap_or_else(|e| {
-            eprintln!("tdd-ratchet: failed to inspect git history: {e}");
-            process::exit(1);
-        });
+    // ── Phase 3: Output ─────────────────────────────────────────────
+    // Always save the updated status file — valid transitions (new
+    // pending tests, promotions) should persist even when there are
+    // violations. This prevents losing state on partial runs.
+    result.updated.save(status_path).unwrap_or_else(|e| {
+        eprintln!("tdd-ratchet: failed to save status file: {e}");
+        process::exit(1);
+    });
 
-        if !history_violations.is_empty() {
-            eprintln!();
-            for v in &history_violations {
-                eprintln!("{}", format_history_violation(v));
-                eprintln!();
-            }
-            eprintln!(
-                "tdd-ratchet: {} history violation(s) found. Status file not updated.",
-                history_violations.len()
-            );
-            process::exit(1);
-        }
+    let pending_count = result
+        .updated
+        .tests
+        .values()
+        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Pending))
+        .count();
+    let passing_count = result
+        .updated
+        .tests
+        .values()
+        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Passing))
+        .count();
 
-        // All checks passed — save updated status file
-        outcome.updated.save(status_path).unwrap_or_else(|e| {
-            eprintln!("tdd-ratchet: failed to save status file: {e}");
-            process::exit(1);
-        });
-
-        let pending_count = outcome
-            .updated
-            .tests
-            .values()
-            .filter(|s| matches!(s, tdd_ratchet::status::TestState::Pending))
-            .count();
-        let passing_count = outcome
-            .updated
-            .tests
-            .values()
-            .filter(|s| matches!(s, tdd_ratchet::status::TestState::Passing))
-            .count();
-
+    if result.violations.is_empty() {
         println!(
             "tdd-ratchet: ok ({passing} passing, {pending} pending)",
             passing = passing_count,
@@ -203,13 +163,15 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
         );
     } else {
         eprintln!();
-        for v in &outcome.violations {
-            eprintln!("{}", format_violation(v));
+        for v in &result.violations {
+            eprintln!("{}", format_eval_violation(v));
             eprintln!();
         }
         eprintln!(
-            "tdd-ratchet: {} violation(s) found. Status file not updated.",
-            outcome.violations.len()
+            "tdd-ratchet: {n} violation(s) found ({passing} passing, {pending} pending)",
+            n = result.violations.len(),
+            passing = passing_count,
+            pending = pending_count,
         );
         process::exit(1);
     }
