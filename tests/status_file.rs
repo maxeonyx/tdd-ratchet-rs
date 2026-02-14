@@ -2,10 +2,12 @@
 //
 // Story 4: Committed status file tracking each test's expected state.
 
+mod common;
+
+use common::TestDir;
 use std::collections::BTreeMap;
 use std::fs;
 use tdd_ratchet::status::{StatusFile, TestState};
-use tempfile::TempDir;
 
 fn make_status(tests: &[(&str, TestState)]) -> StatusFile {
     let mut map = BTreeMap::new();
@@ -35,7 +37,7 @@ fn status_file_with_pending_and_passing_loads_correctly() {
 
 #[test]
 fn round_trip_write_then_read() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     let path = dir.path().join(".test-status.json");
 
     let original = make_status(&[
@@ -47,19 +49,21 @@ fn round_trip_write_then_read() {
     let loaded = StatusFile::load(&path).unwrap();
 
     assert_eq!(original, loaded);
+    dir.pass();
 }
 
 #[test]
 fn status_file_does_not_exist_returns_error() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     let path = dir.path().join(".test-status.json");
     let result = StatusFile::load(&path);
     assert!(result.is_err());
+    dir.pass();
 }
 
 #[test]
 fn malformed_json_returns_clear_error() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     let path = dir.path().join(".test-status.json");
     fs::write(&path, "{ not valid json }").unwrap();
 
@@ -70,6 +74,7 @@ fn malformed_json_returns_clear_error() {
         err.contains("parse") || err.contains("JSON") || err.contains("json"),
         "Error should mention parsing: {err}"
     );
+    dir.pass();
 }
 
 #[test]
@@ -91,7 +96,7 @@ fn test_name_with_special_characters() {
 
 #[test]
 fn saved_file_is_human_readable_json() {
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     let path = dir.path().join(".test-status.json");
 
     let status = make_status(&[
@@ -106,4 +111,5 @@ fn saved_file_is_human_readable_json() {
     let a_pos = contents.find("a_test").unwrap();
     let b_pos = contents.find("b_test").unwrap();
     assert!(a_pos < b_pos, "Tests should be sorted alphabetically");
+    dir.pass();
 }

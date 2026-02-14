@@ -2,10 +2,12 @@
 //
 // Story 1: Full TDD workflow enforced by the ratchet binary.
 
+mod common;
+
+use common::TestDir;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tempfile::TempDir;
 
 fn cargo_bin() -> PathBuf {
     // Build path to our binary
@@ -131,7 +133,7 @@ fn tdd_ratchet_gatekeeper() {
 #[test]
 fn init_creates_empty_status_file() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, out) = run_ratchet_init(dir.path());
@@ -140,12 +142,13 @@ fn init_creates_empty_status_file() {
         dir.path().join(".test-status.json").exists(),
         "Status file should be created"
     );
+    dir.pass();
 }
 
 #[test]
 fn happy_path_tdd_workflow() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     // Step 1: Init ratchet
@@ -187,12 +190,13 @@ fn my_feature_test() {
     let (ok, out) = run_ratchet(dir.path());
     assert!(ok, "Ratchet should accept now-passing test: {out}");
     git_add_commit(dir.path(), "Implement feature");
+    dir.pass();
 }
 
 #[test]
 fn rejects_test_that_passes_immediately() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, _) = run_ratchet_init(dir.path());
@@ -221,12 +225,13 @@ fn cheater_test() {
         out.contains("cheater_test"),
         "Should name the offending test: {out}"
     );
+    dir.pass();
 }
 
 #[test]
 fn rejects_regression() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, _) = run_ratchet_init(dir.path());
@@ -281,12 +286,13 @@ fn fragile_test() {
         out.contains("fragile_test"),
         "Should name the regressed test: {out}"
     );
+    dir.pass();
 }
 
 #[test]
 fn rejects_disappeared_test() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, _) = run_ratchet_init(dir.path());
@@ -331,12 +337,13 @@ fn temporary() {
         out.contains("temporary"),
         "Should name the disappeared test: {out}"
     );
+    dir.pass();
 }
 
 #[test]
 fn zero_tests_project_succeeds() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, out) = run_ratchet_init(dir.path());
@@ -347,12 +354,13 @@ fn zero_tests_project_succeeds() {
     // Only the gatekeeper test exists — should succeed
     let (ok, out) = run_ratchet(dir.path());
     assert!(ok, "Ratchet should succeed with only gatekeeper: {out}");
+    dir.pass();
 }
 
 #[test]
 fn two_new_tests_one_passes_one_fails() {
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, _) = run_ratchet_init(dir.path());
@@ -385,6 +393,7 @@ fn bad_test() {
         !out.contains("good_test") || out.contains("pending"),
         "good_test should be accepted: {out}"
     );
+    dir.pass();
 }
 
 #[test]
@@ -394,7 +403,7 @@ fn rejects_bad_git_history_skipped_pending() {
     // This is the core enforcement: you can't squash "add failing test" +
     // "make it pass" into one commit.
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     // Init ratchet
@@ -437,6 +446,7 @@ fn sneaky_test() {
         out.contains("sneaky_test"),
         "Should name the test that skipped pending: {out}"
     );
+    dir.pass();
 }
 
 #[test]
@@ -445,7 +455,7 @@ fn adoption_existing_project_grandfathers_tests() {
     // passing tests, --init should record a baseline so those tests are
     // grandfathered and don't trigger history violations.
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     // Add a passing test BEFORE ratchet is initialized — this is the
@@ -507,6 +517,7 @@ fn new_cheater_test() {
         out.contains("new_cheater_test"),
         "Should name the new offending test: {out}"
     );
+    dir.pass();
 }
 
 #[test]
@@ -514,7 +525,7 @@ fn full_setup_and_tdd_workflow_from_scratch() {
     // Simulate the complete user journey, starting from the README.
     // At every step, the user is guided by tdd-ratchet's error messages.
     build_ratchet_binary();
-    let dir = TempDir::new().unwrap();
+    let dir = TestDir::new();
     create_test_project(dir.path());
 
     // Step 1: User tries to run ratchet without init.
@@ -625,4 +636,5 @@ fn feature_b_works() {
         status_content.contains("\"feature_b_works\": \"passing\""),
         "feature_b should be passing: {status_content}"
     );
+    dir.pass();
 }
