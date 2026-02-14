@@ -12,7 +12,10 @@ fn make_status(tests: &[(&str, TestState)]) -> StatusFile {
     for (name, state) in tests {
         map.insert(name.to_string(), *state);
     }
-    StatusFile { tests: map }
+    StatusFile {
+        tests: map,
+        baseline: None,
+    }
 }
 
 #[test]

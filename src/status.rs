@@ -25,12 +25,17 @@ impl fmt::Display for TestState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusFile {
     pub tests: BTreeMap<String, TestState>,
+    /// The commit hash at which the ratchet was initialized.
+    /// Tests at or before this commit are grandfathered for history checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<String>,
 }
 
 impl StatusFile {
     pub fn empty() -> Self {
         StatusFile {
             tests: BTreeMap::new(),
+            baseline: None,
         }
     }
 

@@ -46,5 +46,6 @@
     "two_new_tests_one_passes_one_fails": "passing",
     "unknown_fields_are_ignored": "passing",
     "zero_tests_project_succeeds": "passing"
-  }
+  },
+  "baseline": "cf15e52b1af0558c8f8cf55f8576102e70c47bb8"
 }

@@ -18,26 +18,44 @@ fn main() {
     let status_path = project_dir.join(".test-status.json");
 
     if args.iter().any(|a| a == "--init") {
-        init(&status_path);
+        init(&status_path, &project_dir);
         return;
     }
 
     run_ratchet(&project_dir, &status_path);
 }
 
-fn init(status_path: &PathBuf) {
+fn init(status_path: &PathBuf, project_dir: &PathBuf) {
     if status_path.exists() {
         eprintln!(
             "tdd-ratchet: .test-status.json already exists. Remove it first to re-initialize."
         );
         process::exit(1);
     }
-    let status = StatusFile::empty();
+
+    // Record current HEAD as baseline for grandfathering existing tests
+    let baseline = get_head_commit(project_dir);
+
+    let mut status = StatusFile::empty();
+    status.baseline = baseline;
     status.save(status_path).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to create status file: {e}");
         process::exit(1);
     });
     println!("tdd-ratchet: initialized .test-status.json");
+}
+
+fn get_head_commit(project_dir: &PathBuf) -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(project_dir)
+        .output()
+        .ok()?;
+    if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        None
+    }
 }
 
 fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
@@ -76,14 +94,9 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
     let outcome = check_ratchet(&status, &results);
 
     if outcome.violations.is_empty() {
-        // Save updated status file
-        outcome.updated.save(status_path).unwrap_or_else(|e| {
-            eprintln!("tdd-ratchet: failed to save status file: {e}");
-            process::exit(1);
-        });
-
-        // Check git history for TDD violations
-        let history_violations = check_history(project_dir, None).unwrap_or_else(|e| {
+        // Check git history for TDD violations BEFORE saving
+        let baseline = outcome.updated.baseline.as_deref();
+        let history_violations = check_history(project_dir, baseline).unwrap_or_else(|e| {
             eprintln!("tdd-ratchet: failed to inspect git history: {e}");
             process::exit(1);
         });
@@ -95,11 +108,17 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
                 eprintln!();
             }
             eprintln!(
-                "tdd-ratchet: {} history violation(s) found.",
+                "tdd-ratchet: {} history violation(s) found. Status file not updated.",
                 history_violations.len()
             );
             process::exit(1);
         }
+
+        // All checks passed — save updated status file
+        outcome.updated.save(status_path).unwrap_or_else(|e| {
+            eprintln!("tdd-ratchet: failed to save status file: {e}");
+            process::exit(1);
+        });
 
         let pending_count = outcome
             .updated

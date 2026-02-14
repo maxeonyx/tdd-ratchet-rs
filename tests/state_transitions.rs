@@ -9,6 +9,7 @@ use tdd_ratchet::status::{StatusFile, TestState};
 fn status(tests: &[(&str, TestState)]) -> StatusFile {
     StatusFile {
         tests: tests.iter().map(|(n, s)| (n.to_string(), *s)).collect(),
+        baseline: None,
     }
 }
 
