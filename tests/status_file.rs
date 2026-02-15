@@ -14,10 +14,7 @@ fn make_status(tests: &[(&str, TestState)]) -> StatusFile {
     for (name, state) in tests {
         map.insert(name.to_string(), *state);
     }
-    StatusFile {
-        tests: map,
-        baseline: None,
-    }
+    StatusFile::new(map, None)
 }
 
 #[test]
@@ -48,7 +45,9 @@ fn round_trip_write_then_read() {
     original.save(&path).unwrap();
     let loaded = StatusFile::load(&path).unwrap();
 
-    assert_eq!(original, loaded);
+    // save() injects $schema, so compare the fields we care about
+    assert_eq!(original.tests, loaded.tests);
+    assert_eq!(original.baseline, loaded.baseline);
     dir.pass();
 }
 
@@ -78,10 +77,37 @@ fn malformed_json_returns_clear_error() {
 }
 
 #[test]
-fn unknown_fields_are_ignored() {
+fn unknown_fields_are_rejected() {
     let json = r#"{"tests":{"a":"passing"},"future_field":"whatever"}"#;
+    let result: Result<StatusFile, _> = serde_json::from_str(json);
+    assert!(result.is_err(), "Unknown fields should be rejected");
+}
+
+#[test]
+fn schema_field_is_accepted() {
+    let json = r#"{"$schema":"https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json","tests":{"a":"passing"}}"#;
     let status: StatusFile = serde_json::from_str(json).unwrap();
     assert_eq!(status.tests.len(), 1);
+}
+
+#[test]
+fn save_always_writes_schema_key() {
+    let dir = TestDir::new();
+    let path = dir.path().join(".test-status.json");
+
+    let status = make_status(&[("a", TestState::Passing)]);
+    status.save(&path).unwrap();
+
+    let contents = fs::read_to_string(&path).unwrap();
+    assert!(
+        contents.contains("$schema"),
+        "Saved file should contain $schema key"
+    );
+    assert!(
+        contents.contains("tdd-ratchet.maxeonyx.com"),
+        "Saved file should contain schema URL"
+    );
+    dir.pass();
 }
 
 #[test]

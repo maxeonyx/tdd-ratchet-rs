@@ -6,6 +6,8 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
+pub const SCHEMA_URL: &str = "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TestState {
@@ -23,7 +25,11 @@ impl fmt::Display for TestState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StatusFile {
+    /// JSON Schema reference — always set to the canonical URL on save.
+    #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
+    schema: Option<String>,
     pub tests: BTreeMap<String, TestState>,
     /// The commit hash at which the ratchet was initialized.
     /// Tests at or before this commit are grandfathered for history checks.
@@ -32,11 +38,16 @@ pub struct StatusFile {
 }
 
 impl StatusFile {
-    pub fn empty() -> Self {
+    pub fn new(tests: BTreeMap<String, TestState>, baseline: Option<String>) -> Self {
         StatusFile {
-            tests: BTreeMap::new(),
-            baseline: None,
+            schema: None,
+            tests,
+            baseline,
         }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(BTreeMap::new(), None)
     }
 
     pub fn load(path: &Path) -> Result<Self, StatusFileError> {
@@ -53,8 +64,11 @@ impl StatusFile {
     }
 
     pub fn save(&self, path: &Path) -> Result<(), StatusFileError> {
+        // Always write the $schema key
+        let mut with_schema = self.clone();
+        with_schema.schema = Some(SCHEMA_URL.to_string());
         let contents =
-            serde_json::to_string_pretty(self).map_err(|e| StatusFileError::Serialize {
+            serde_json::to_string_pretty(&with_schema).map_err(|e| StatusFileError::Serialize {
                 path: path.to_path_buf(),
                 source: e,
             })?;

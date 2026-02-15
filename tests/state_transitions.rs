@@ -7,10 +7,10 @@ use tdd_ratchet::runner::{TestOutcome, TestResult};
 use tdd_ratchet::status::{StatusFile, TestState};
 
 fn status(tests: &[(&str, TestState)]) -> StatusFile {
-    StatusFile {
-        tests: tests.iter().map(|(n, s)| (n.to_string(), *s)).collect(),
-        baseline: None,
-    }
+    StatusFile::new(
+        tests.iter().map(|(n, s)| (n.to_string(), *s)).collect(),
+        None,
+    )
 }
 
 fn results(tests: &[(&str, TestOutcome)]) -> Vec<TestResult> {

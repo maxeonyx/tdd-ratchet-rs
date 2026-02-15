@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tdd-ratchet</title>
+  <style>
+    :root {
+      --fg: #e0e0e0;
+      --fg-dim: #999;
+      --bg: #1a1a1a;
+      --bg-alt: #222;
+      --accent: #7eb8da;
+      --border: #333;
+      --code-bg: #111;
+      --pass: #6abf69;
+      --pend: #d4a54a;
+      --fail: #d46a6a;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.2rem; margin-top: 2.5rem; margin-bottom: 0.75rem; color: var(--accent); }
+    p { margin-bottom: 1rem; }
+    a { color: var(--accent); }
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.9em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; font-size: 0.85em; }
+    .subtitle { color: var(--fg-dim); margin-bottom: 2rem; font-size: 1.05rem; }
+    .state-machine {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin: 1.25rem 0;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.9rem;
+    }
+    .state {
+      padding: 0.4em 0.8em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-alt);
+    }
+    .state.new { color: var(--fg-dim); border-style: dashed; }
+    .state.pending { color: var(--pend); border-color: var(--pend); }
+    .state.passing { color: var(--pass); border-color: var(--pass); }
+    .arrow { color: var(--fg-dim); font-size: 1.2rem; }
+    .label { color: var(--fg-dim); font-size: 0.8rem; display: block; text-align: center; }
+    .step { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+    .links { margin-top: 2rem; }
+    .links a { display: inline-block; margin-right: 1.5rem; }
+    footer { margin-top: 3rem; color: var(--fg-dim); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>tdd-ratchet</h1>
+  <p class="subtitle">Enforces failing-first tests for Rust projects via git history.</p>
+
+  <p>
+    <strong>tdd-ratchet</strong> wraps <code>cargo nextest</code> and tracks
+    per-test states in a committed <code>.test-status.json</code>. It enforces
+    that every new test must fail before it can pass &mdash; verified by
+    inspecting git history. No shortcuts.
+  </p>
+
+  <h2>State machine</h2>
+  <p>Every test goes through exactly two states. Each transition is a separate commit.</p>
+  <div class="state-machine">
+    <span class="state new">(new test)</span>
+    <div class="step">
+      <span class="label">fails</span>
+      <span class="arrow">&rarr;</span>
+    </div>
+    <span class="state pending">pending</span>
+    <div class="step">
+      <span class="label">passes</span>
+      <span class="arrow">&rarr;</span>
+    </div>
+    <span class="state passing">passing</span>
+  </div>
+  <p>
+    A test that passes on its first appearance is <strong>rejected</strong>.
+    A passing test that starts failing is a <strong>regression</strong>.
+    A tracked test that disappears is <strong>rejected</strong>.
+  </p>
+
+  <h2>Workflow</h2>
+<pre><code><span style="color:var(--fg-dim)"># 1. Write a failing test</span>
+<span style="color:var(--fg-dim)"># 2. Run the ratchet &mdash; test added as pending</span>
+cargo ratchet
+git add -A &amp;&amp; git commit -m "test: describe expected behavior"
+
+<span style="color:var(--fg-dim)"># 3. Implement the feature</span>
+<span style="color:var(--fg-dim)"># 4. Run the ratchet &mdash; test promoted to passing</span>
+cargo ratchet
+git add -A &amp;&amp; git commit -m "feat: implement the behavior"</code></pre>
+
+  <h2>Install</h2>
+<pre><code>[dev-dependencies]
+tdd-ratchet = { git = "https://github.com/maxeonyx/tdd-ratchet-rs" }</code></pre>
+  <p>Then initialize:</p>
+<pre><code>cargo ratchet --init</code></pre>
+
+  <h2>Status file</h2>
+  <p>
+    The <code>.test-status.json</code> file is committed to your repo. It maps
+    full nextest test names to their expected state:
+  </p>
+<pre><code>{
+  "$schema": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
+  "tests": {
+    "my-crate::tests$it_does_the_thing": "passing",
+    "my-crate::tests$planned_feature": "pending"
+  }
+}</code></pre>
+  <p>
+    <a href="/schema/test-status.v1.json">JSON Schema</a> &mdash;
+    add <code>"$schema"</code> to your status file for editor validation.
+  </p>
+
+  <h2>How it enforces TDD</h2>
+  <p>The ratchet checks three things on every run:</p>
+  <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
+    <li><strong>State transitions</strong> &mdash; new tests must fail, passing tests must stay passing, tracked tests must be present.</li>
+    <li><strong>Git history</strong> &mdash; walks commits since a baseline to verify every test appeared as <code>pending</code> before <code>passing</code>. No test can skip the failing step.</li>
+    <li><strong>Bypass prevention</strong> &mdash; a gatekeeper test ensures <code>cargo test</code> run directly (outside the ratchet) fails with instructions.</li>
+  </ol>
+
+  <hr>
+
+  <div class="links">
+    <a href="https://github.com/maxeonyx/tdd-ratchet-rs">GitHub</a>
+    <a href="/schema/test-status.v1.json">JSON Schema</a>
+  </div>
+
+  <footer>
+    By <a href="https://github.com/maxeonyx">Max Coplan</a>
+  </footer>
+</body>
+</html>
