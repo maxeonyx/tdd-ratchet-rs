@@ -5,7 +5,7 @@ use std::process::{self, Command};
 use tdd_ratchet::errors::format_eval_violation;
 use tdd_ratchet::history::collect_history_snapshots;
 use tdd_ratchet::ratchet::evaluate;
-use tdd_ratchet::runner::parse_cargo_test_output;
+use tdd_ratchet::runner::parse_nextest_output;
 use tdd_ratchet::status::StatusFile;
 
 fn main() {
@@ -40,16 +40,22 @@ fn init(status_path: &PathBuf, project_dir: &PathBuf) {
 
     // Run tests and snapshot existing results into the status file
     let output = Command::new("cargo")
-        .args(["test", "--no-fail-fast"])
+        .args([
+            "nextest",
+            "run",
+            "--no-fail-fast",
+            "--message-format",
+            "libtest-json",
+        ])
         .current_dir(project_dir)
         .env("TDD_RATCHET", "1")
+        .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1")
         .output()
         .ok();
 
     if let Some(output) = output {
-        let combined = String::from_utf8_lossy(&output.stdout).to_string()
-            + &String::from_utf8_lossy(&output.stderr);
-        let results = parse_cargo_test_output(&combined);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let results = parse_nextest_output(&stdout);
         for result in &results {
             if result.outcome == tdd_ratchet::runner::TestOutcome::Ignored {
                 continue;
@@ -110,19 +116,25 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
     };
 
     let output = Command::new("cargo")
-        .args(["test", "--no-fail-fast"])
+        .args([
+            "nextest",
+            "run",
+            "--no-fail-fast",
+            "--message-format",
+            "libtest-json",
+        ])
         .current_dir(project_dir)
         .env("TDD_RATCHET", "1")
+        .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1")
         .output()
         .unwrap_or_else(|e| {
-            eprintln!("tdd-ratchet: failed to run cargo test: {e}");
+            eprintln!("tdd-ratchet: failed to run cargo nextest: {e}");
             process::exit(1);
         });
 
-    let combined = String::from_utf8_lossy(&output.stdout).to_string()
-        + &String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
 
-    let results = parse_cargo_test_output(&combined);
+    let results = parse_nextest_output(&stdout);
 
     let baseline = status.baseline.as_deref();
     let history_snapshots = collect_history_snapshots(project_dir, baseline).unwrap_or_else(|e| {
