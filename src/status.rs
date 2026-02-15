@@ -48,7 +48,7 @@ impl TestEntry {
     pub fn baseline(&self) -> Option<&str> {
         match self {
             TestEntry::Simple(_) => None,
-            TestEntry::WithBaseline { .. } => None,
+            TestEntry::WithBaseline { baseline, .. } => Some(baseline),
         }
     }
 }
@@ -96,19 +96,11 @@ impl StatusFile {
         // Always write the $schema key
         let mut with_schema = self.clone();
         with_schema.schema = Some(SCHEMA_URL.to_string());
-        let mut contents =
+        let contents =
             serde_json::to_string_pretty(&with_schema).map_err(|e| StatusFileError::Serialize {
                 path: path.to_path_buf(),
                 source: e,
             })?;
-        // Deliberately preserve the pre-normalization behavior for the rewrite
-        // red phase. The following green commit removes this branch.
-        if with_schema.tests.len() == 1 && with_schema.tests.contains_key("a") {
-            contents = contents.replace(
-                r#""a": "passing""#,
-                r#""a": { "state": "passing" }"#,
-            );
-        }
         std::fs::write(path, contents + "\n").map_err(|e| StatusFileError::Io {
             path: path.to_path_buf(),
             source: e,

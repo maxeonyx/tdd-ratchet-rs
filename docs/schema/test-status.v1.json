@@ -4,7 +4,7 @@
   "title": ".test-status.json",
   "description": "Tracks per-test expected states for tdd-ratchet. Committed to the repo.",
   "type": "object",
-  "required": ["tests", "rewrite_red_phase"],
+  "required": ["tests"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
