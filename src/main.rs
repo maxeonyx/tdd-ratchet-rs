@@ -1,6 +1,6 @@
 use std::env;
 use std::path::PathBuf;
-use std::process::{self, Command};
+use std::process::{self, Command, Stdio};
 
 use tdd_ratchet::errors::format_eval_violation;
 use tdd_ratchet::history::collect_history_snapshots;
@@ -126,6 +126,7 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
         .current_dir(project_dir)
         .env("TDD_RATCHET", "1")
         .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1")
+        .stderr(Stdio::inherit()) // stream test output to terminal
         .output()
         .unwrap_or_else(|e| {
             eprintln!("tdd-ratchet: failed to run cargo nextest: {e}");
@@ -168,8 +169,8 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
         .count();
 
     if result.violations.is_empty() {
-        println!(
-            "tdd-ratchet: ok ({passing} passing, {pending} pending)",
+        eprintln!(
+            "\ntdd-ratchet: ok ({passing} passing, {pending} pending)",
             passing = passing_count,
             pending = pending_count,
         );

@@ -50,9 +50,5 @@
     "unknown_fields_are_ignored": "passing",
     "zero_tests_project_succeeds": "passing"
   },
-  "baseline": "3f72b46556086528a903d99297de591a6f2b8627",
-  "renames": {
-    "multiple_suites_combined": "multiple_test_binaries_combined",
-    "non_json_lines_are_skipped": "compiler_warnings_mixed_in_do_not_confuse_parser"
-  }
+  "baseline": "13afc9101ea1ed7f26698ce5c1fb6909b52f3c4c"
 }
