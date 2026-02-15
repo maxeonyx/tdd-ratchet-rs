@@ -1,0 +1,6 @@
+[test-groups.serial-integration]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = 'binary(end_to_end) | binary(bypass_prevention)'
+test-group = 'serial-integration'

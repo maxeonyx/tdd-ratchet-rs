@@ -1,4 +1,7 @@
-// Test runner output parsing: extracts per-test results from cargo test verbose output.
+// Test runner output parsing: extracts per-test results from nextest
+// libtest-json structured output.
+
+use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestResult {
@@ -13,35 +16,43 @@ pub enum TestOutcome {
     Ignored,
 }
 
-/// Parse `cargo test` verbose output into per-test results.
+#[derive(Deserialize)]
+struct TestEvent {
+    #[serde(rename = "type")]
+    kind: String,
+    event: String,
+    name: Option<String>,
+}
+
+/// Parse nextest libtest-json output into per-test results.
 ///
-/// Looks for lines matching `test <name> ... ok/FAILED/ignored`.
-pub fn parse_cargo_test_output(output: &str) -> Vec<TestResult> {
+/// Each JSON line with `"type":"test"` and `"event":"ok"|"failed"|"ignored"`
+/// produces a TestResult. The test name is the part after `$` in the
+/// nextest name format `crate::binary$test_name`.
+pub fn parse_nextest_output(output: &str) -> Vec<TestResult> {
     let mut results = Vec::new();
     for line in output.lines() {
-        let line = line.trim();
-        if !line.starts_with("test ") {
-            continue;
-        }
-        let outcome = if line.ends_with(" ... ok") {
-            TestOutcome::Passed
-        } else if line.ends_with(" ... FAILED") {
-            TestOutcome::Failed
-        } else if line.ends_with(" ... ignored") {
-            TestOutcome::Ignored
-        } else {
+        let Ok(event) = serde_json::from_str::<TestEvent>(line) else {
             continue;
         };
-        // Extract name: between "test " and " ... "
-        let after_test = &line["test ".len()..];
-        let name = after_test
-            .rsplit_once(" ... ")
-            .map(|(name, _)| name)
-            .unwrap_or(after_test);
-        results.push(TestResult {
-            name: name.to_string(),
-            outcome,
-        });
+        if event.kind != "test" {
+            continue;
+        }
+        let outcome = match event.event.as_str() {
+            "ok" => TestOutcome::Passed,
+            "failed" => TestOutcome::Failed,
+            "ignored" => TestOutcome::Ignored,
+            _ => continue, // "started" etc.
+        };
+        let Some(full_name) = event.name else {
+            continue;
+        };
+        // Name format: "crate::binary$test_name" — extract after $
+        let name = match full_name.split_once('$') {
+            Some((_, test_name)) => test_name.to_string(),
+            None => full_name,
+        };
+        results.push(TestResult { name, outcome });
     }
     results
 }
