@@ -10,12 +10,11 @@ See [VISION.md](VISION.md) for full requirements and [PLAN.md](PLAN.md) for stor
 
 ## Install
 
-Not yet released. Will be installable as a dev dependency:
-
-```toml
-[dev-dependencies]
-tdd-ratchet = { git = "https://github.com/maxeonyx/tdd-ratchet-rs" }
 ```
+cargo install tdd-ratchet
+```
+
+This installs the `cargo-ratchet` binary, enabling `cargo ratchet` as a subcommand.
 
 ## Usage
 
