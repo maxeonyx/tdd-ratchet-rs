@@ -158,3 +158,50 @@ fn no_status_file_in_history_is_ok() {
     assert!(violations.is_empty());
     dir.pass();
 }
+
+#[test]
+fn per_test_baseline_grandfathers_individual_test() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    // Commit 1: test appears as passing with a per-test baseline pointing to this commit
+    // (In real usage, user would set baseline to HEAD before committing)
+    fs::write(dir.path().join("README.md"), "hello").unwrap();
+    commit(dir.path(), "Initial");
+
+    // Get commit hash
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(dir.path())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("HOME", dir.path())
+        .output()
+        .unwrap();
+    let baseline_commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Commit 2: grandfathered_test appears as passing with per-test baseline,
+    // cheater_test appears as passing without any baseline
+    let status_json = format!(
+        r#"{{"tests":{{"grandfathered":{{"state":"passing","baseline":"{baseline_commit}"}},"cheater":"passing"}}}}"#
+    );
+    write_status(dir.path(), &status_json);
+    commit(dir.path(), "Add tests");
+
+    let violations = check_history(dir.path(), None).unwrap();
+
+    // grandfathered should NOT be flagged (has per-test baseline)
+    assert!(
+        !violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "grandfathered")
+        ),
+        "grandfathered should not be flagged: {violations:?}"
+    );
+    // cheater SHOULD be flagged (no baseline, skipped pending)
+    assert!(
+        violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "cheater")
+        ),
+        "cheater should be flagged: {violations:?}"
+    );
+    dir.pass();
+}

@@ -15,9 +15,31 @@
       "type": "object",
       "description": "Map of test names to their expected state. Keys are full nextest names (e.g. 'crate::binary$test_name').",
       "additionalProperties": {
-        "type": "string",
-        "enum": ["pending", "passing"],
-        "description": "Expected test state. 'pending' = test is expected to fail (not yet implemented). 'passing' = test is expected to pass."
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": ["pending", "passing"],
+            "description": "Expected test state. 'pending' = test is expected to fail (not yet implemented). 'passing' = test is expected to pass."
+          },
+          {
+            "type": "object",
+            "description": "Test entry with per-test baseline for grandfathering.",
+            "required": ["state", "baseline"],
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["pending", "passing"],
+                "description": "Expected test state."
+              },
+              "baseline": {
+                "type": "string",
+                "description": "Git commit hash at which this test is grandfathered. History checking trusts the status at this commit.",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        ]
       }
     },
     "baseline": {

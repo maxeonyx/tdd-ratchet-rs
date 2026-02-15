@@ -24,13 +24,42 @@ impl fmt::Display for TestState {
     }
 }
 
+/// A test entry in the status file. Either a bare state string or an object
+/// with state + per-test baseline for grandfathering.
+///
+/// JSON forms:
+///   "passing"
+///   { "state": "passing", "baseline": "abc123..." }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TestEntry {
+    Simple(TestState),
+    WithBaseline { state: TestState, baseline: String },
+}
+
+impl TestEntry {
+    pub fn state(&self) -> TestState {
+        match self {
+            TestEntry::Simple(s) => *s,
+            TestEntry::WithBaseline { state, .. } => *state,
+        }
+    }
+
+    pub fn baseline(&self) -> Option<&str> {
+        match self {
+            TestEntry::Simple(_) => None,
+            TestEntry::WithBaseline { baseline, .. } => Some(baseline),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatusFile {
     /// JSON Schema reference — always set to the canonical URL on save.
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     schema: Option<String>,
-    pub tests: BTreeMap<String, TestState>,
+    pub tests: BTreeMap<String, TestEntry>,
     /// The commit hash at which the ratchet was initialized.
     /// Tests at or before this commit are grandfathered for history checks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -38,7 +67,7 @@ pub struct StatusFile {
 }
 
 impl StatusFile {
-    pub fn new(tests: BTreeMap<String, TestState>, baseline: Option<String>) -> Self {
+    pub fn new(tests: BTreeMap<String, TestEntry>, baseline: Option<String>) -> Self {
         StatusFile {
             schema: None,
             tests,

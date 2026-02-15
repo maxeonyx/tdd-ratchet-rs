@@ -20,6 +20,10 @@
     "tdd-ratchet::gatekeeper$tdd_ratchet_gatekeeper": "passing",
     "tdd-ratchet::git_history$baseline_commit_grandfathers_existing_tests": "passing",
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
+    "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {
+      "state": "passing",
+      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+    },
     "tdd-ratchet::git_history$test_appeared_as_passing_without_pending_is_rejected": "passing",
     "tdd-ratchet::git_history$test_appeared_as_pending_then_passing_is_ok": "passing",
     "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": "passing",
@@ -37,10 +41,30 @@
     "tdd-ratchet::state_transitions$tracked_test_missing_from_run_is_rejected": "passing",
     "tdd-ratchet::status_file$empty_status_file_parses_to_empty_map": "passing",
     "tdd-ratchet::status_file$malformed_json_returns_clear_error": "passing",
+    "tdd-ratchet::status_file$per_test_baseline_mixed_with_simple_entries": {
+      "state": "passing",
+      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+    },
+    "tdd-ratchet::status_file$per_test_baseline_object_form_parses": {
+      "state": "passing",
+      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+    },
     "tdd-ratchet::status_file$round_trip_write_then_read": "passing",
     "tdd-ratchet::status_file$save_always_writes_schema_key": "passing",
+    "tdd-ratchet::status_file$save_normalizes_simple_entries_as_strings": {
+      "state": "passing",
+      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+    },
+    "tdd-ratchet::status_file$save_preserves_per_test_baseline_as_object": {
+      "state": "passing",
+      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+    },
     "tdd-ratchet::status_file$saved_file_is_human_readable_json": "passing",
     "tdd-ratchet::status_file$schema_field_is_accepted": "passing",
+    "tdd-ratchet::status_file$schema_validates_status_file": {
+      "state": "passing",
+      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+    },
     "tdd-ratchet::status_file$status_file_does_not_exist_returns_error": "passing",
     "tdd-ratchet::status_file$status_file_with_pending_and_passing_loads_correctly": "passing",
     "tdd-ratchet::status_file$test_name_with_special_characters": "passing",

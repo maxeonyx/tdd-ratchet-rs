@@ -36,14 +36,14 @@ pub fn format_report(result: &EvalResult) -> String {
         .updated
         .tests
         .values()
-        .filter(|s| matches!(s, TestState::Passing))
+        .filter(|s| s.state() == TestState::Passing)
         .count();
 
     let pending: Vec<&String> = result
         .updated
         .tests
         .iter()
-        .filter(|(_, s)| matches!(s, TestState::Pending))
+        .filter(|(_, s)| s.state() == TestState::Pending)
         .map(|(name, _)| name)
         .collect();
 

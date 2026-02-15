@@ -2,7 +2,7 @@
 
 use crate::history::{check_history_snapshots, HistorySnapshot, HistoryViolation};
 use crate::runner::{TestOutcome, TestResult};
-use crate::status::{StatusFile, TestState};
+use crate::status::{StatusFile, TestEntry, TestState};
 use std::collections::BTreeSet;
 
 /// The gatekeeper test name. This test is special-cased: it's allowed to
@@ -58,18 +58,21 @@ pub fn evaluate(
     let seen_names: BTreeSet<&str> = results.iter().map(|r| r.name.as_str()).collect();
 
     for result in results {
-        match (status.tests.get(&result.name), result.outcome) {
+        match (
+            status.tests.get(&result.name).map(|e| e.state()),
+            result.outcome,
+        ) {
             // New test (not in status file)
             (None, TestOutcome::Failed) => {
                 updated
                     .tests
-                    .insert(result.name.clone(), TestState::Pending);
+                    .insert(result.name.clone(), TestEntry::Simple(TestState::Pending));
             }
             (None, TestOutcome::Passed) => {
                 if result.name.ends_with(GATEKEEPER_TEST_NAME) {
                     updated
                         .tests
-                        .insert(result.name.clone(), TestState::Passing);
+                        .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
                 } else {
                     violations.push(Violation::NewTestPassed {
                         test: result.name.clone(),
@@ -83,7 +86,7 @@ pub fn evaluate(
             (Some(TestState::Pending), TestOutcome::Passed) => {
                 updated
                     .tests
-                    .insert(result.name.clone(), TestState::Passing);
+                    .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
             }
             (Some(TestState::Pending), TestOutcome::Ignored) => {}
 
@@ -150,17 +153,20 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
     let seen_names: BTreeSet<&str> = results.iter().map(|r| r.name.as_str()).collect();
 
     for result in results {
-        match (status.tests.get(&result.name), result.outcome) {
+        match (
+            status.tests.get(&result.name).map(|e| e.state()),
+            result.outcome,
+        ) {
             (None, TestOutcome::Failed) => {
                 updated
                     .tests
-                    .insert(result.name.clone(), TestState::Pending);
+                    .insert(result.name.clone(), TestEntry::Simple(TestState::Pending));
             }
             (None, TestOutcome::Passed) => {
                 if result.name.ends_with(GATEKEEPER_TEST_NAME) {
                     updated
                         .tests
-                        .insert(result.name.clone(), TestState::Passing);
+                        .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
                 } else {
                     violations.push(RatchetViolation::NewTestPassed {
                         test: result.name.clone(),
@@ -172,7 +178,7 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
             (Some(TestState::Pending), TestOutcome::Passed) => {
                 updated
                     .tests
-                    .insert(result.name.clone(), TestState::Passing);
+                    .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
             }
             (Some(TestState::Pending), TestOutcome::Ignored) => {}
             (Some(TestState::Passing), TestOutcome::Passed) => {}
