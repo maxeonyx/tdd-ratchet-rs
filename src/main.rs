@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
 
-use tdd_ratchet::errors::format_eval_violation;
+use tdd_ratchet::errors::format_report;
 use tdd_ratchet::history::collect_history_snapshots;
 use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::parse_nextest_output;
@@ -155,37 +155,11 @@ fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
         process::exit(1);
     });
 
-    let pending_count = result
-        .updated
-        .tests
-        .values()
-        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Pending))
-        .count();
-    let passing_count = result
-        .updated
-        .tests
-        .values()
-        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Passing))
-        .count();
+    let has_violations = !result.violations.is_empty();
+    let report = format_report(&result);
+    eprint!("\n{report}");
 
-    if result.violations.is_empty() {
-        eprintln!(
-            "\ntdd-ratchet: ok ({passing} passing, {pending} pending)",
-            passing = passing_count,
-            pending = pending_count,
-        );
-    } else {
-        eprintln!();
-        for v in &result.violations {
-            eprintln!("{}", format_eval_violation(v));
-            eprintln!();
-        }
-        eprintln!(
-            "tdd-ratchet: {n} violation(s) found ({passing} passing, {pending} pending)",
-            n = result.violations.len(),
-            passing = passing_count,
-            pending = pending_count,
-        );
+    if has_violations {
         process::exit(1);
     }
 }

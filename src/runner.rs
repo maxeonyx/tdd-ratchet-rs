@@ -27,8 +27,8 @@ struct TestEvent {
 /// Parse nextest libtest-json output into per-test results.
 ///
 /// Each JSON line with `"type":"test"` and `"event":"ok"|"failed"|"ignored"`
-/// produces a TestResult. The test name is the part after `$` in the
-/// nextest name format `crate::binary$test_name`.
+/// produces a TestResult. The full nextest name is preserved as-is
+/// (e.g. `my-crate::tests$test_name`).
 pub fn parse_nextest_output(output: &str) -> Vec<TestResult> {
     let mut results = Vec::new();
     for line in output.lines() {
@@ -47,12 +47,11 @@ pub fn parse_nextest_output(output: &str) -> Vec<TestResult> {
         let Some(full_name) = event.name else {
             continue;
         };
-        // Name format: "crate::binary$test_name" — extract after $
-        let name = match full_name.split_once('$') {
-            Some((_, test_name)) => test_name.to_string(),
-            None => full_name,
-        };
-        results.push(TestResult { name, outcome });
+        // Keep the full nextest name as-is (e.g. "my-crate::tests$test_one")
+        results.push(TestResult {
+            name: full_name,
+            outcome,
+        });
     }
     results
 }
