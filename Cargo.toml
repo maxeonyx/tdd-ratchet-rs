@@ -2,6 +2,14 @@
 name = "tdd-ratchet"
 version = "0.1.0"
 edition = "2024"
+description = "Enforce strict TDD in Rust projects — new tests must fail before they can pass, verified by git history"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/maxeonyx/tdd-ratchet-rs"
+readme = "README.md"
+
+[[bin]]
+name = "cargo-ratchet"
+path = "src/main.rs"
 
 [dependencies]
 git2 = "0.20"

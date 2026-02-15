@@ -14,7 +14,7 @@ fn cargo_bin() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("target");
     path.push("debug");
-    path.push("tdd-ratchet");
+    path.push("cargo-ratchet");
     path
 }
 
