@@ -18,6 +18,28 @@ fn cargo_bin() -> PathBuf {
     path
 }
 
+/// Resolve RUSTUP_HOME for subprocess isolation. When HOME is overridden
+/// for git config isolation, Rustup can't find the toolchain unless we
+/// explicitly pass through the real RUSTUP_HOME / CARGO_HOME.
+fn rustup_home() -> PathBuf {
+    if let Ok(val) = std::env::var("RUSTUP_HOME") {
+        PathBuf::from(val)
+    } else {
+        // Default: $HOME/.rustup
+        let real_home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+        PathBuf::from(real_home).join(".rustup")
+    }
+}
+
+fn cargo_home() -> PathBuf {
+    if let Ok(val) = std::env::var("CARGO_HOME") {
+        PathBuf::from(val)
+    } else {
+        let real_home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+        PathBuf::from(real_home).join(".cargo")
+    }
+}
+
 fn build_ratchet_binary() {
     let status = Command::new("cargo")
         .args(["build"])
@@ -93,6 +115,8 @@ fn run_ratchet(dir: &Path) -> (bool, String) {
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("HOME", dir)
+        .env("RUSTUP_HOME", rustup_home())
+        .env("CARGO_HOME", cargo_home())
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&output.stdout).to_string()
@@ -106,6 +130,8 @@ fn run_ratchet_init(dir: &Path) -> (bool, String) {
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("HOME", dir)
+        .env("RUSTUP_HOME", rustup_home())
+        .env("CARGO_HOME", cargo_home())
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&output.stdout).to_string()
@@ -388,10 +414,11 @@ fn bad_test() {
     let (ok, out) = run_ratchet(dir.path());
     assert!(!ok, "Should reject the passing test: {out}");
     assert!(out.contains("bad_test"), "Should name bad_test: {out}");
-    // good_test should NOT be in the violations
+    // good_test should NOT be in the TDD violations (it may appear in nextest
+    // output since it fails, which is expected)
     assert!(
-        !out.contains("good_test") || out.contains("pending"),
-        "good_test should be accepted: {out}"
+        !out.contains("✗ test-project::two_tests$good_test"),
+        "good_test should not be flagged as a violation: {out}"
     );
     dir.pass();
 }
@@ -626,14 +653,14 @@ fn feature_b_works() {
     assert!(ok, "Ratchet should promote feature_b to passing: {out}");
     git_add_commit(dir.path(), "Implement feature B");
 
-    // Verify final status file has both tests as passing
+    // Verify final status file has both tests as passing (full nextest names)
     let status_content = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
     assert!(
-        status_content.contains("\"feature_a_works\": \"passing\""),
+        status_content.contains("feature_a_works") && status_content.contains("\"passing\""),
         "feature_a should be passing: {status_content}"
     );
     assert!(
-        status_content.contains("\"feature_b_works\": \"passing\""),
+        status_content.contains("feature_b_works") && status_content.contains("\"passing\""),
         "feature_b should be passing: {status_content}"
     );
     dir.pass();

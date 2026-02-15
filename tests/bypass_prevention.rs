@@ -6,8 +6,27 @@ mod common;
 
 use common::TestDir;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Resolve RUSTUP_HOME for subprocess isolation.
+fn rustup_home() -> PathBuf {
+    if let Ok(val) = std::env::var("RUSTUP_HOME") {
+        PathBuf::from(val)
+    } else {
+        let real_home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+        PathBuf::from(real_home).join(".rustup")
+    }
+}
+
+fn cargo_home() -> PathBuf {
+    if let Ok(val) = std::env::var("CARGO_HOME") {
+        PathBuf::from(val)
+    } else {
+        let real_home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+        PathBuf::from(real_home).join(".cargo")
+    }
+}
 
 /// Create a minimal Rust project in a temp dir with a gatekeeper test.
 fn create_project_with_gatekeeper(dir: &Path) {
@@ -68,6 +87,8 @@ fn cargo_test_without_ratchet_env_fails_with_instructions() {
         .current_dir(dir.path())
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("HOME", dir.path())
+        .env("RUSTUP_HOME", rustup_home())
+        .env("CARGO_HOME", cargo_home())
         .env_remove("TDD_RATCHET")
         .output()
         .unwrap();
@@ -95,6 +116,8 @@ fn cargo_test_with_ratchet_env_passes_gatekeeper() {
         .current_dir(dir.path())
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("HOME", dir.path())
+        .env("RUSTUP_HOME", rustup_home())
+        .env("CARGO_HOME", cargo_home())
         .env("TDD_RATCHET", "1")
         .output()
         .unwrap();

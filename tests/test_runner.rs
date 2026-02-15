@@ -21,21 +21,21 @@ fn parses_mixed_pass_and_fail() {
     assert_eq!(
         results[0],
         TestResult {
-            name: "test_one".into(),
+            name: "my-crate::tests$test_one".into(),
             outcome: TestOutcome::Passed
         }
     );
     assert_eq!(
         results[1],
         TestResult {
-            name: "test_two".into(),
+            name: "my-crate::tests$test_two".into(),
             outcome: TestOutcome::Failed
         }
     );
     assert_eq!(
         results[2],
         TestResult {
-            name: "test_three".into(),
+            name: "my-crate::tests$test_three".into(),
             outcome: TestOutcome::Passed
         }
     );
@@ -64,7 +64,7 @@ fn parses_deeply_nested_module_names() {
 "#;
     let results = parse_nextest_output(output);
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].name, "a::b::c::d::deep_test");
+    assert_eq!(results[0].name, "my-crate::lib$a::b::c::d::deep_test");
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn ignored_tests_are_tracked_as_ignored() {
     assert_eq!(
         results[1],
         TestResult {
-            name: "slow_test".into(),
+            name: "my-crate::lib$slow_test".into(),
             outcome: TestOutcome::Ignored
         }
     );
@@ -110,7 +110,7 @@ another non-json line
 "#;
     let results = parse_nextest_output(output);
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].name, "basic");
+    assert_eq!(results[0].name, "my-crate::lib$basic");
 }
 
 #[test]
@@ -129,12 +129,12 @@ fn multiple_suites_combined() {
 "#;
     let results = parse_nextest_output(output);
     assert_eq!(results.len(), 3);
-    assert_eq!(results[0].name, "unit_test");
-    assert_eq!(results[1].name, "test_a");
+    assert_eq!(results[0].name, "my-crate::unit_tests$unit_test");
+    assert_eq!(results[1].name, "my-crate::integration$test_a");
     assert_eq!(
         results[2],
         TestResult {
-            name: "test_b".into(),
+            name: "my-crate::integration$test_b".into(),
             outcome: TestOutcome::Failed
         }
     );
