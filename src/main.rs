@@ -65,7 +65,10 @@ fn init(status_path: &PathBuf, project_dir: &PathBuf) {
                 tdd_ratchet::runner::TestOutcome::Failed => tdd_ratchet::status::TestState::Pending,
                 tdd_ratchet::runner::TestOutcome::Ignored => unreachable!(),
             };
-            status.tests.insert(result.name.clone(), state);
+            status.tests.insert(
+                result.name.clone(),
+                tdd_ratchet::status::TestEntry::Simple(state),
+            );
         }
     }
 
@@ -77,12 +80,12 @@ fn init(status_path: &PathBuf, project_dir: &PathBuf) {
     let passing = status
         .tests
         .values()
-        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Passing))
+        .filter(|s| s.state() == tdd_ratchet::status::TestState::Passing)
         .count();
     let pending = status
         .tests
         .values()
-        .filter(|s| matches!(s, tdd_ratchet::status::TestState::Pending))
+        .filter(|s| s.state() == tdd_ratchet::status::TestState::Pending)
         .count();
     println!("tdd-ratchet: initialized .test-status.json ({passing} passing, {pending} pending)");
 }

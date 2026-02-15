@@ -4,11 +4,14 @@
 
 use tdd_ratchet::ratchet::{check_ratchet, RatchetViolation};
 use tdd_ratchet::runner::{TestOutcome, TestResult};
-use tdd_ratchet::status::{StatusFile, TestState};
+use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
 
 fn status(tests: &[(&str, TestState)]) -> StatusFile {
     StatusFile::new(
-        tests.iter().map(|(n, s)| (n.to_string(), *s)).collect(),
+        tests
+            .iter()
+            .map(|(n, s)| (n.to_string(), TestEntry::Simple(*s)))
+            .collect(),
         None,
     )
 }
@@ -35,7 +38,10 @@ fn new_test_that_fails_is_accepted_as_pending() {
         "Should accept: {:?}",
         outcome.violations
     );
-    assert_eq!(outcome.updated.tests["new_test"], TestState::Pending,);
+    assert_eq!(
+        outcome.updated.tests["new_test"].state(),
+        TestState::Pending,
+    );
 }
 
 #[test]
@@ -61,7 +67,7 @@ fn pending_test_that_now_passes_is_promoted() {
     let tr = results(&[("my_test", TestOutcome::Passed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["my_test"], TestState::Passing);
+    assert_eq!(outcome.updated.tests["my_test"].state(), TestState::Passing);
 }
 
 #[test]
@@ -70,7 +76,7 @@ fn pending_test_still_failing_is_ok() {
     let tr = results(&[("my_test", TestOutcome::Failed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["my_test"], TestState::Pending);
+    assert_eq!(outcome.updated.tests["my_test"].state(), TestState::Pending);
 }
 
 // --- Story 6: Passing tests must keep passing ---
@@ -81,7 +87,7 @@ fn passing_test_still_passing_is_ok() {
     let tr = results(&[("my_test", TestOutcome::Passed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["my_test"], TestState::Passing);
+    assert_eq!(outcome.updated.tests["my_test"].state(), TestState::Passing);
 }
 
 #[test]
@@ -152,8 +158,8 @@ fn empty_status_all_tests_fail_all_accepted_as_pending() {
     let tr = results(&[("a", TestOutcome::Failed), ("b", TestOutcome::Failed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["a"], TestState::Pending);
-    assert_eq!(outcome.updated.tests["b"], TestState::Pending);
+    assert_eq!(outcome.updated.tests["a"].state(), TestState::Pending);
+    assert_eq!(outcome.updated.tests["b"].state(), TestState::Pending);
 }
 
 #[test]

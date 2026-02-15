@@ -69,11 +69,19 @@ pub fn collect_history_snapshots(
 /// Verifies that every test that appears as "passing" had a prior
 /// appearance as "pending". Tests in the first snapshot (when a baseline
 /// is configured) are grandfathered. The gatekeeper test is always exempt.
+///
+/// Per-test baselines: extracted from the *latest* snapshot (current status
+/// file). When a test has a per-test baseline pointing to commit X, history
+/// checking for that test starts at commit X. The test's first appearance
+/// at or after X is grandfathered — same as how the global baseline
+/// grandfathers all tests in its first snapshot.
 pub fn check_history_snapshots(
     snapshots: &[HistorySnapshot],
     has_baseline: bool,
 ) -> Vec<HistoryViolation> {
-    let mut first_seen: BTreeMap<String, (String, crate::status::TestState)> = BTreeMap::new();
+    use crate::status::TestState;
+
+    let mut first_seen: BTreeMap<String, (String, TestState)> = BTreeMap::new();
     let mut violations = Vec::new();
 
     let first_snapshot_commit = if has_baseline {
@@ -82,22 +90,66 @@ pub fn check_history_snapshots(
         None
     };
 
+    // Collect per-test baselines from the latest snapshot (current status file).
+    let per_test_baselines: BTreeMap<String, String> = snapshots
+        .last()
+        .map(|s| {
+            s.status
+                .tests
+                .iter()
+                .filter_map(|(name, entry)| entry.baseline().map(|b| (name.clone(), b.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Build a commit-to-index map for efficient ordering lookups.
+    let commit_index: BTreeMap<&str, usize> = snapshots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.commit.as_str(), i))
+        .collect();
+
     for snapshot in snapshots {
-        for (test_name, state) in &snapshot.status.tests {
-            if !first_seen.contains_key(test_name) {
-                first_seen.insert(test_name.clone(), (snapshot.commit.clone(), *state));
-                if *state == crate::status::TestState::Passing {
-                    let is_grandfathered = first_snapshot_commit
-                        .as_ref()
-                        .is_some_and(|first| &snapshot.commit == first);
-                    let is_gatekeeper = test_name.ends_with(GATEKEEPER_TEST_NAME);
-                    if !is_grandfathered && !is_gatekeeper {
-                        violations.push(HistoryViolation::SkippedPending {
-                            test: test_name.clone(),
-                            commit: snapshot.commit.clone(),
-                        });
-                    }
+        for (test_name, entry) in &snapshot.status.tests {
+            if first_seen.contains_key(test_name) {
+                continue;
+            }
+
+            let state = entry.state();
+            first_seen.insert(test_name.clone(), (snapshot.commit.clone(), state));
+
+            if state != TestState::Passing {
+                continue;
+            }
+
+            // Check if grandfathered by global baseline
+            let is_global_grandfathered = first_snapshot_commit
+                .as_ref()
+                .is_some_and(|first| &snapshot.commit == first);
+
+            // Check if grandfathered by per-test baseline.
+            // A per-test baseline at commit X means: the test's first appearance
+            // at or after X is grandfathered. If the baseline commit isn't in the
+            // snapshots (had no status file), everything is considered "after" it.
+            let is_per_test_grandfathered = per_test_baselines.get(test_name).is_some_and(|ptb| {
+                let snapshot_idx = commit_index.get(snapshot.commit.as_str());
+                let baseline_idx = commit_index.get(ptb.as_str());
+                match (snapshot_idx, baseline_idx) {
+                    // First appearance is at or after baseline — grandfathered
+                    (Some(&si), Some(&bi)) => si >= bi,
+                    // Baseline not in snapshots — everything is after it
+                    (Some(_), None) => true,
+                    _ => false,
                 }
+            });
+
+            let is_gatekeeper = test_name.ends_with(GATEKEEPER_TEST_NAME);
+
+            if !is_global_grandfathered && !is_per_test_grandfathered && !is_gatekeeper {
+                violations.push(HistoryViolation::SkippedPending {
+                    test: test_name.clone(),
+                    commit: snapshot.commit.clone(),
+                });
             }
         }
     }
