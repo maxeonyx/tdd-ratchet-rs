@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
+  "title": ".test-status.json",
+  "description": "Tracks per-test expected states for tdd-ratchet. Committed to the repo.",
+  "type": "object",
+  "required": ["tests"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema reference for editor support."
+    },
+    "tests": {
+      "type": "object",
+      "description": "Map of test names to their expected state. Keys are full nextest names (e.g. 'crate::binary$test_name').",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["pending", "passing"],
+        "description": "Expected test state. 'pending' = test is expected to fail (not yet implemented). 'passing' = test is expected to pass."
+      }
+    },
+    "baseline": {
+      "type": "string",
+      "description": "Git commit hash at which the ratchet was initialized. Tests at or before this commit are grandfathered for history checks. Omit for new projects to check all history.",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}
