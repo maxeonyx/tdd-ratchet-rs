@@ -1,6 +1,6 @@
 // Report formatting: produces the complete tdd-ratchet output after a run.
 
-use crate::ratchet::{EvalResult, Violation, GATEKEEPER_TEST_NAME};
+use crate::ratchet::{EvalResult, GATEKEEPER_TEST_NAME, Violation};
 use crate::status::TestState;
 
 const SEPARATOR: &str = "───────────────────────────────────────────────────────────────";
