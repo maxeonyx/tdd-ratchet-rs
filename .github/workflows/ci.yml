@@ -39,8 +39,8 @@ jobs:
       - name: Install cargo-nextest
         run: cargo install cargo-nextest --locked
 
-      - name: Run tests
-        run: cargo test
+      - name: Run tdd-ratchet
+        run: cargo run --
 
   build:
     name: Build (${{ matrix.target }})
