@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::{self, Command, Stdio};
 
 use tdd_ratchet::errors::format_report;
@@ -25,7 +25,7 @@ fn main() {
     run_ratchet(&project_dir, &status_path);
 }
 
-fn init(status_path: &PathBuf, project_dir: &PathBuf) {
+fn init(status_path: &Path, project_dir: &Path) {
     if status_path.exists() {
         eprintln!(
             "tdd-ratchet: .test-status.json already exists. Remove it first to re-initialize."
@@ -90,7 +90,7 @@ fn init(status_path: &PathBuf, project_dir: &PathBuf) {
     println!("tdd-ratchet: initialized .test-status.json ({passing} passing, {pending} pending)");
 }
 
-fn get_head_commit(project_dir: &PathBuf) -> Option<String> {
+fn get_head_commit(project_dir: &Path) -> Option<String> {
     let output = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .current_dir(project_dir)
@@ -103,7 +103,7 @@ fn get_head_commit(project_dir: &PathBuf) -> Option<String> {
     }
 }
 
-fn run_ratchet(project_dir: &PathBuf, status_path: &PathBuf) {
+fn run_ratchet(project_dir: &Path, status_path: &Path) {
     // ── Phase 1: Gather ─────────────────────────────────────────────
     let status = if status_path.exists() {
         StatusFile::load(status_path).unwrap_or_else(|e| {

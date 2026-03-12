@@ -3,7 +3,7 @@
 // Stories 2, 3: The ratchet invokes cargo nextest and parses per-test results
 // from libtest-json structured output.
 
-use tdd_ratchet::runner::{parse_nextest_output, TestOutcome, TestResult};
+use tdd_ratchet::runner::{TestOutcome, TestResult, parse_nextest_output};
 
 #[test]
 fn parses_mixed_pass_and_fail() {

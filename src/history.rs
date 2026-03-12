@@ -34,7 +34,7 @@ pub fn collect_history_snapshots(
     revwalk.push_head()?;
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::REVERSE)?;
 
-    let baseline_oid = baseline.map(|b| git2::Oid::from_str(b)).transpose()?;
+    let baseline_oid = baseline.map(git2::Oid::from_str).transpose()?;
     let mut past_baseline = baseline_oid.is_none();
 
     for oid_result in revwalk {
