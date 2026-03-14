@@ -16,6 +16,13 @@ cargo install tdd-ratchet
 
 This installs the `cargo-ratchet` binary, enabling `cargo ratchet` as a subcommand.
 
+Alternative (bare binary release):
+
+```
+curl -Lo ~/.local/bin/cargo-ratchet https://tdd-ratchet.maxeonyx.com/releases/cargo-ratchet-x86_64-linux
+chmod +x ~/.local/bin/cargo-ratchet
+```
+
 ## Usage
 
 ```
