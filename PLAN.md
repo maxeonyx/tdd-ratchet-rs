@@ -98,3 +98,4 @@ set it up if missing.
   2. **Logic** — pure function over all gathered data. Applies ratchet rules AND history rules together. Produces updated status file + violations list.
   3. **Output** — always save updated status file (valid transitions apply even when there are violations), then report violations and exit non-zero if any.
   Currently the phases are interleaved: ratchet logic runs, then history is checked separately, and the status file is only saved if everything passes. This means valid state transitions (e.g. new pending tests) are lost on any violation.
+- Per-test baseline: allow status file entries to be either a string (`"passing"`) or an object (`{ "state": "passing", "baseline": "abc123" }`). The global baseline provides fast history skip for large/old repos; per-test baseline gives granularity when needed (e.g. grandfathering individual tests added mid-project).

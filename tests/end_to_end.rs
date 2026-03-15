@@ -362,3 +362,227 @@ fn bad_test() {
         "good_test should be accepted: {out}"
     );
 }
+
+#[test]
+fn rejects_bad_git_history_skipped_pending() {
+    // A test that appears as "passing" in the status file without ever
+    // having been "pending" in a prior commit should be rejected.
+    // This is the core enforcement: you can't squash "add failing test" +
+    // "make it pass" into one commit.
+    build_ratchet_binary();
+    let dir = TempDir::new().unwrap();
+    create_test_project(dir.path());
+
+    // Init ratchet
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    git_add_commit(dir.path(), "Init ratchet");
+
+    // Manually write the status file with a test marked as "passing"
+    // that was never "pending" — simulating someone who edited the
+    // status file by hand or squashed commits.
+    fs::write(
+        dir.path().join("tests/sneaky.rs"),
+        r#"
+#[test]
+fn sneaky_test() {
+    assert_eq!(1 + 1, 2);
+}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join(".test-status.json"),
+        r#"{
+  "tests": {
+    "sneaky_test": "passing"
+  }
+}
+"#,
+    )
+    .unwrap();
+    git_add_commit(dir.path(), "Add test as passing without pending");
+
+    // Run ratchet — should reject because history shows sneaky_test
+    // appeared as "passing" without a prior "pending" commit
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "Ratchet should reject bad git history: {out}");
+    assert!(
+        out.contains("sneaky_test"),
+        "Should name the test that skipped pending: {out}"
+    );
+}
+
+#[test]
+fn adoption_existing_project_grandfathers_tests() {
+    // When adopting tdd-ratchet into an existing project that already has
+    // passing tests, --init should record a baseline so those tests are
+    // grandfathered and don't trigger history violations.
+    build_ratchet_binary();
+    let dir = TempDir::new().unwrap();
+    create_test_project(dir.path());
+
+    // Add a passing test BEFORE ratchet is initialized — this is the
+    // "existing project" scenario
+    fs::write(
+        dir.path().join("tests/existing.rs"),
+        r#"
+#[test]
+fn legacy_test() {
+    assert!(true);
+}
+"#,
+    )
+    .unwrap();
+    git_add_commit(dir.path(), "Add existing test (pre-ratchet)");
+
+    // Now adopt tdd-ratchet
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt tdd-ratchet");
+
+    // Run ratchet — legacy_test passes immediately but should be
+    // accepted because it predates the baseline
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Ratchet should accept grandfathered test: {out}");
+
+    // Now add a NEW test that passes immediately — this should be
+    // rejected even though legacy_test was allowed
+    fs::write(
+        dir.path().join("tests/new_cheater.rs"),
+        r#"
+#[test]
+fn new_cheater_test() {
+    assert!(true);
+}
+"#,
+    )
+    .unwrap();
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(
+        !ok,
+        "Ratchet should reject new test that passes immediately: {out}"
+    );
+    assert!(
+        out.contains("new_cheater_test"),
+        "Should name the new offending test: {out}"
+    );
+}
+
+#[test]
+fn full_setup_and_tdd_workflow_from_scratch() {
+    // Simulate the complete user journey, starting from the README.
+    // At every step, the user is guided by tdd-ratchet's error messages.
+    build_ratchet_binary();
+    let dir = TempDir::new().unwrap();
+    create_test_project(dir.path());
+
+    // Step 1: User tries to run ratchet without init.
+    // Ratchet fails with instructions to run --init.
+    let (ok, _out) = run_ratchet(dir.path());
+    assert!(!ok, "Should fail without status file");
+
+    // Step 2: User runs --init (as instructed by step 1's error message).
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    git_add_commit(dir.path(), "Initialize tdd-ratchet");
+
+    // Step 3: User runs ratchet. It fails because there's no gatekeeper
+    // test. The error message tells them exactly what to add.
+    let (ok, _out) = run_ratchet(dir.path());
+    assert!(!ok, "Should fail without gatekeeper test");
+
+    // Step 4: User adds gatekeeper test (as instructed by step 3's error).
+    fs::write(
+        dir.path().join("tests/gatekeeper.rs"),
+        r#"
+#[test]
+fn tdd_ratchet_gatekeeper() {
+    if std::env::var("TDD_RATCHET").is_err() {
+        panic!(
+            "This project uses tdd-ratchet for strict TDD.\n\
+             Run `tdd-ratchet` instead of `cargo test`."
+        );
+    }
+}
+"#,
+    )
+    .unwrap();
+
+    // Step 5: Ratchet succeeds. The gatekeeper is special-cased — it's
+    // allowed to pass immediately (no pending state required).
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Ratchet should accept gatekeeper: {out}");
+    git_add_commit(dir.path(), "Add gatekeeper test");
+
+    // Step 6: Write a failing test for feature A.
+    fs::write(
+        dir.path().join("tests/feature_a.rs"),
+        r#"
+#[test]
+fn feature_a_works() {
+    panic!("TODO: implement feature A");
+}
+"#,
+    )
+    .unwrap();
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Ratchet should accept new failing test: {out}");
+    git_add_commit(dir.path(), "Add failing test for feature A");
+
+    // Step 7: Implement feature A — test now passes, promoted.
+    fs::write(
+        dir.path().join("tests/feature_a.rs"),
+        r#"
+#[test]
+fn feature_a_works() {
+    assert_eq!(2 + 2, 4);
+}
+"#,
+    )
+    .unwrap();
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Ratchet should promote feature_a to passing: {out}");
+    git_add_commit(dir.path(), "Implement feature A");
+
+    // Step 8: Second feature — same cycle.
+    fs::write(
+        dir.path().join("tests/feature_b.rs"),
+        r#"
+#[test]
+fn feature_b_works() {
+    panic!("TODO: implement feature B");
+}
+"#,
+    )
+    .unwrap();
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Ratchet should accept second failing test: {out}");
+    git_add_commit(dir.path(), "Add failing test for feature B");
+
+    // Step 9: Implement feature B.
+    fs::write(
+        dir.path().join("tests/feature_b.rs"),
+        r#"
+#[test]
+fn feature_b_works() {
+    assert!(true);
+}
+"#,
+    )
+    .unwrap();
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Ratchet should promote feature_b to passing: {out}");
+    git_add_commit(dir.path(), "Implement feature B");
+
+    // Verify final status file has both tests as passing
+    let status_content = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        status_content.contains("\"feature_a_works\": \"passing\""),
+        "feature_a should be passing: {status_content}"
+    );
+    assert!(
+        status_content.contains("\"feature_b_works\": \"passing\""),
+        "feature_b should be passing: {status_content}"
+    );
+}
