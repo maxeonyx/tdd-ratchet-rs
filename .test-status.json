@@ -31,7 +31,7 @@
     "pending_test_still_failing_is_ok": "passing",
     "pending_test_that_now_passes_is_promoted": "passing",
     "regression_error_has_context_problem_suggestion": "passing",
-    "rejects_bad_git_history_skipped_pending": "pending",
+    "rejects_bad_git_history_skipped_pending": "passing",
     "rejects_disappeared_test": "passing",
     "rejects_regression": "passing",
     "rejects_test_that_passes_immediately": "passing",

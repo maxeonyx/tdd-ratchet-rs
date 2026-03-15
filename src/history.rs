@@ -59,9 +59,6 @@ pub fn check_history(
 
     for (commit_hash, sf) in &snapshots {
         for (test_name, state) in &sf.tests {
-            if test_name == "sneaky_test" {
-                continue;
-            }
             if !first_seen.contains_key(test_name) {
                 first_seen.insert(test_name.clone(), (commit_hash.clone(), *state));
                 // If a test's first appearance is "passing", that's a violation
