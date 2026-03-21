@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::{self, Command, Stdio};
 
 use tdd_ratchet::errors::format_report;
-use tdd_ratchet::history::collect_history_snapshots;
+use tdd_ratchet::history::{collect_history_snapshots, read_head_status};
 use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::parse_nextest_output;
 use tdd_ratchet::status::StatusFile;
@@ -39,10 +39,7 @@ fn init(status_path: &Path, project_dir: &Path) {
         process::exit(1);
     }
 
-    let baseline = get_head_commit(project_dir);
-
     let mut status = StatusFile::empty();
-    status.baseline = baseline;
 
     // Run tests and snapshot existing results into the status file
     let results = run_nextest(project_dir, false);
@@ -79,19 +76,6 @@ fn init(status_path: &Path, project_dir: &Path) {
     println!("tdd-ratchet: initialized .test-status.json ({passing} passing, {pending} pending)");
 }
 
-fn get_head_commit(project_dir: &Path) -> Option<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(project_dir)
-        .output()
-        .ok()?;
-    if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        None
-    }
-}
-
 fn run_ratchet(project_dir: &Path, status_path: &Path) {
     let gathered = gather_run(project_dir, status_path);
 
@@ -124,10 +108,9 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
 }
 
 fn gather_run(project_dir: &Path, status_path: &Path) -> GatheredRun {
-    let status = load_status_input(status_path);
+    let status = load_status_input(project_dir, status_path);
     let results = run_nextest(project_dir, true);
-    let baseline = status.baseline.as_deref();
-    let history_snapshots = collect_history_snapshots(project_dir, baseline).unwrap_or_else(|e| {
+    let history_snapshots = collect_history_snapshots(project_dir).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to inspect git history: {e}");
         process::exit(1);
     });
@@ -139,19 +122,13 @@ fn gather_run(project_dir: &Path, status_path: &Path) -> GatheredRun {
     }
 }
 
-fn load_status_input(status_path: &Path) -> StatusFile {
-    if !status_path.exists() {
-        eprintln!(
-            "tdd-ratchet: no .test-status.json found.\n\
-             Run `tdd-ratchet --init` to create one."
-        );
-        process::exit(1);
-    }
-
-    StatusFile::read_from_path(status_path).unwrap_or_else(|e| {
-        eprintln!("tdd-ratchet: {e}");
-        process::exit(1);
-    })
+fn load_status_input(project_dir: &Path, _status_path: &Path) -> StatusFile {
+    read_head_status(project_dir)
+        .unwrap_or_else(|e| {
+            eprintln!("tdd-ratchet: failed to read committed status file: {e}");
+            process::exit(1);
+        })
+        .unwrap_or_else(StatusFile::empty)
 }
 
 fn run_nextest(project_dir: &Path, inherit_stderr: bool) -> Vec<tdd_ratchet::runner::TestResult> {

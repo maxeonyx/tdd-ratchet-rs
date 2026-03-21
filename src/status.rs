@@ -60,23 +60,21 @@ pub struct StatusFile {
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     schema: Option<String>,
     pub tests: BTreeMap<String, TestEntry>,
-    /// The commit hash at which the ratchet was initialized.
-    /// Tests at or before this commit are grandfathered for history checks.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub baseline: Option<String>,
+    #[serde(rename = "baseline", default, skip_serializing)]
+    legacy_baseline: Option<String>,
 }
 
 impl StatusFile {
-    pub fn new(tests: BTreeMap<String, TestEntry>, baseline: Option<String>) -> Self {
+    pub fn new(tests: BTreeMap<String, TestEntry>) -> Self {
         StatusFile {
             schema: None,
             tests,
-            baseline,
+            legacy_baseline: None,
         }
     }
 
     pub fn empty() -> Self {
-        Self::new(BTreeMap::new(), None)
+        Self::new(BTreeMap::new())
     }
 
     pub fn read_from_path(path: &Path) -> Result<Self, StatusFileError> {
