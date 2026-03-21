@@ -112,6 +112,14 @@ pub fn format_report(result: &EvalResult) -> String {
     out
 }
 
+fn detail_line(message: impl Into<String>) -> String {
+    format!("    ✗ {}\n", message.into())
+}
+
+fn warning_line(message: impl Into<String>) -> String {
+    format!("    ! {}\n", message.into())
+}
+
 fn render_section(section: ReportSection) -> String {
     let mut out = String::new();
     out.push_str(SEPARATOR);
@@ -152,15 +160,15 @@ fn format_tdd_violations(violations: &[&Violation]) -> ReportSection {
     for violation in violations {
         match violation {
             Violation::NewTestPassed { test } => {
-                details.push(format!(
-                    "    ✗ New test passed without failing first: {test}\n"
-                ));
+                details.push(detail_line(format!(
+                    "New test passed without failing first: {test}"
+                )));
             }
             Violation::SkippedPending { test, commit } => {
                 let short = &commit[..8.min(commit.len())];
-                details.push(format!(
-                    "    ✗ Test skipped the pending state in git history: {test} (commit {short})\n"
-                ));
+                details.push(detail_line(format!(
+                    "Test skipped the pending state in git history: {test} (commit {short})"
+                )));
             }
             _ => unreachable!(),
         }
@@ -185,7 +193,7 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
         .iter()
         .map(|violation| match violation {
             Violation::TestDisappeared { test } => {
-                format!("    ✗ Tracked test missing from the run: {test}\n")
+                detail_line(format!("Tracked test missing from the run: {test}"))
             }
             _ => unreachable!(),
         })
@@ -196,7 +204,7 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
         why: story_14_why(
             "It relies on `.test-status.json` as the committed record of which tests define the project's expected behavior, so missing tests could hide deleted coverage or an undeclared rename.",
         ),
-        problem: format!("{count} tracked {test_word} tracked in `.test-status.json` but missing from the current test run."),
+        problem: format!("{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."),
         fix: "If you removed it intentionally, also remove it from `.test-status.json`. If you renamed it, add a `renames` entry so tdd-ratchet can bridge the old name to the new one.".into(),
         details,
         extra: None,
@@ -207,25 +215,21 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
     let details = rename_violations
         .iter()
         .map(|violation| match violation {
-            Violation::RenameOldNameMissing { new_name, old_name } => {
-                format!("    ✗ {new_name} -> {old_name}: old name is not present in committed status\n")
-            }
-            Violation::RenameNewNameMissing { new_name, old_name } => {
-                format!(
-                    "    ✗ {new_name} -> {old_name}: new name was not found in the current test run\n"
-                )
-            }
-            Violation::RenameOldNameStillPresent { new_name, old_name } => {
-                format!(
-                    "    ✗ {new_name} -> {old_name}: old name still appears in the current test run\n"
-                )
-            }
-            Violation::RenameNewNameAlreadyTracked { new_name, old_name } => {
-                format!("    ✗ {new_name} -> {old_name}: new name is already tracked independently\n")
-            }
-            Violation::RenameOldNameMappedMultipleTimes { old_name } => {
-                format!("    ✗ {old_name}: multiple rename entries point at the same old name\n")
-            }
+            Violation::RenameOldNameMissing { new_name, old_name } => detail_line(format!(
+                "{new_name} -> {old_name}: old name is not present in committed status"
+            )),
+            Violation::RenameNewNameMissing { new_name, old_name } => detail_line(format!(
+                "{new_name} -> {old_name}: new name was not found in the current test run"
+            )),
+            Violation::RenameOldNameStillPresent { new_name, old_name } => detail_line(format!(
+                "{new_name} -> {old_name}: old name still appears in the current test run"
+            )),
+            Violation::RenameNewNameAlreadyTracked { new_name, old_name } => detail_line(format!(
+                "{new_name} -> {old_name}: new name is already tracked independently"
+            )),
+            Violation::RenameOldNameMappedMultipleTimes { old_name } => detail_line(format!(
+                "{old_name}: multiple rename entries point at the same old name"
+            )),
             _ => unreachable!(),
         })
         .collect();
@@ -269,7 +273,7 @@ fn format_regressions(violations: &[&Violation]) -> ReportSection {
         .iter()
         .map(|violation| match violation {
             Violation::Regression { test } => {
-                format!("    ✗ Previously passing test now fails: {test}\n")
+                detail_line(format!("Previously passing test now fails: {test}"))
             }
             _ => unreachable!(),
         })
@@ -288,27 +292,37 @@ fn format_regressions(violations: &[&Violation]) -> ReportSection {
 }
 
 fn format_warnings(warnings: &[Warning]) -> String {
-    let mut out = String::new();
-    out.push_str(SEPARATOR);
-    out.push('\n');
-    out.push_str("tdd-ratchet: rename warnings:\n");
-    for warning in warnings {
-        out.push_str(&format_warning(warning));
-    }
-    out.push_str(SEPARATOR);
-    out.push('\n');
-    out
+    render_section(ReportSection {
+        title: if warnings.len() == 1 {
+            "rename warning".into()
+        } else {
+            "rename warnings".into()
+        },
+        why: story_14_why(
+            "Temporary rename mappings are only meant to bridge one rename commit, so the report also teaches you when that temporary bookkeeping can be removed.",
+        ),
+        problem: if warnings.len() == 1 {
+            "A temporary rename mapping no longer needs to stay in `.test-status.json`.".into()
+        } else {
+            "Temporary rename mappings no longer need to stay in `.test-status.json`.".into()
+        },
+        fix: "Remove the `renames` entry in your next commit once the rename bridge is no longer needed.".into(),
+        details: warnings.iter().map(format_warning).collect(),
+        extra: None,
+    })
 }
 
 fn format_warning(warning: &Warning) -> String {
     match warning {
         Warning::RenameApplied { new_name, old_name } => {
-            format!(
-                "    ! {new_name} renamed from {old_name}; the renames entry can now be removed\n"
-            )
+            warning_line(format!(
+                "{new_name} renamed from {old_name}; the temporary `renames` entry has done its job and can now be removed"
+            ))
         }
         Warning::StaleRename { new_name, old_name } => {
-            format!("    ! {new_name} -> {old_name} is stale; the renames entry can be removed\n")
+            warning_line(format!(
+                "{new_name} -> {old_name} is stale; the temporary `renames` entry can be removed"
+            ))
         }
     }
 }
