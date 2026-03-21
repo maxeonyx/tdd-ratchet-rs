@@ -142,6 +142,10 @@ fn render_section(section: ReportSection) -> String {
     out
 }
 
+fn story_14_why(specific_context: &str) -> String {
+    format!("This project uses tdd-ratchet to enforce test-first discipline. {specific_context}")
+}
+
 fn format_tdd_violations(violations: &[&Violation]) -> ReportSection {
     let mut details = Vec::new();
 
@@ -164,9 +168,11 @@ fn format_tdd_violations(violations: &[&Violation]) -> ReportSection {
 
     ReportSection {
         title: "strict TDD violation".into(),
-        why: "this project uses tdd-ratchet to enforce test-first discipline: a test must exist in a failing state before a later commit makes it pass.".into(),
-        problem: "one or more tests reached a passing state without the required failing-first history.".into(),
-        fix: "split the work into separate commits: commit the failing test first, then commit the implementation that makes it pass. If the history is already mixed together, rebase to separate those commits.".into(),
+        why: story_14_why(
+            "It checks git history because a test must fail before it is allowed to pass, so the test describes the desired behavior before the implementation exists.",
+        ),
+        problem: "One or more tests violated the failing-first rule: tdd-ratchet could not find a commit where the test was failing before a later commit made it pass.".into(),
+        fix: "Rebase your branch so the failing test is committed before the implementation that makes it pass. If a new test already passes, move or rewrite it so an earlier commit shows the test failing for the right reason.".into(),
         details,
         extra: None,
     }
@@ -187,9 +193,11 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
 
     ReportSection {
         title: "tracked test missing from run".into(),
-        why: "tdd-ratchet can only enforce the committed test contract when every tracked test still appears in the test run.".into(),
-        problem: format!("{count} tracked {test_word} listed in `.test-status.json` but did not appear in the current run."),
-        fix: "if you intentionally removed a test, remove it from both the code and `.test-status.json` in the same commit. If you renamed it, use the `renames` section to bridge the old name to the new one.".into(),
+        why: story_14_why(
+            "It relies on `.test-status.json` as the committed record of which tests define the project's expected behavior, so missing tests could hide deleted coverage or an undeclared rename.",
+        ),
+        problem: format!("{count} tracked {test_word} tracked in `.test-status.json` but missing from the current test run."),
+        fix: "If you removed it intentionally, also remove it from `.test-status.json`. If you renamed it, add a `renames` entry so tdd-ratchet can bridge the old name to the new one.".into(),
         details,
         extra: None,
     }
@@ -224,9 +232,11 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
 
     ReportSection {
         title: "invalid test rename declaration".into(),
-        why: "tdd-ratchet needs a valid identity bridge to distinguish a real rename from adding one test and removing another.".into(),
-        problem: "the `renames` section in `.test-status.json` does not map one committed old name to one observed new name.".into(),
-        fix: "correct the rename mapping so the old name exists in committed status, the new name appears in the current run, and only one new name points to each old name.".into(),
+        why: story_14_why(
+            "When a test is renamed, it needs a valid identity bridge so the existing test history is preserved instead of looking like one test disappeared and a different one appeared.",
+        ),
+        problem: "A rename instruction is invalid, so tdd-ratchet cannot safely connect the committed test history to the currently observed test name.".into(),
+        fix: "To fix it, correct the `renames` entry so it bridges one committed old name to one observed new name, and remove any stale or conflicting mappings.".into(),
         details,
         extra: None,
     }
@@ -235,9 +245,11 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
 fn format_missing_gatekeeper() -> ReportSection {
     ReportSection {
         title: "missing gatekeeper test".into(),
-        why: "tdd-ratchet only works when tests are run through the ratchet; the gatekeeper blocks direct `cargo test` runs that would bypass the policy.".into(),
+        why: story_14_why(
+            "It only works when tests are run through the ratchet, and without it, someone can run `cargo test` directly and bypass the ratchet.",
+        ),
         problem: format!("no test named `{GATEKEEPER_TEST_NAME}` was found in the current run."),
-        fix: "add the gatekeeper test below so direct `cargo test` runs fail with instructions and ratchet runs can set `TDD_RATCHET=1`.".into(),
+        fix: "To fix it, add the gatekeeper test below so direct `cargo test` runs fail with instructions and ratchet runs can set `TDD_RATCHET=1`.".into(),
         details: Vec::new(),
         extra: Some(format!(
             "    #[test]\n\
@@ -265,9 +277,11 @@ fn format_regressions(violations: &[&Violation]) -> ReportSection {
 
     ReportSection {
         title: "regression detected".into(),
-        why: "once a test is tracked as passing, tdd-ratchet treats later failures as regressions so the suite stays trustworthy.".into(),
-        problem: format!("{count} tracked passing {test_word} now failing in the current run."),
-        fix: "fix the failing test or implementation. If the test is obsolete, remove it from both the code and `.test-status.json` in the same commit.".into(),
+        why: story_14_why(
+            "Once a test is accepted as passing, later failures mean the protected behavior regressed and the suite is no longer keeping that promise.",
+        ),
+        problem: format!("{count} tracked passing {test_word} was previously tracked as passing but is now failing in the current run."),
+        fix: "Fix the failing test, or if the change is intentional, update `.test-status.json` to match the new reality.".into(),
         details,
         extra: None,
     }
