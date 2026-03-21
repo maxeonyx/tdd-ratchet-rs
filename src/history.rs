@@ -57,11 +57,10 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
 /// appearance as "pending". Tests in the first committed status snapshot are
 /// grandfathered. The gatekeeper test is always exempt.
 ///
-/// Per-test baselines: extracted from the *latest* snapshot (current status
-/// file). When a test has a per-test baseline pointing to commit X, history
-/// checking for that test starts at commit X. The test's first appearance
-/// at or after X is grandfathered — same as how the global baseline
-/// grandfathers all tests in its first snapshot.
+/// Per-test baselines: extracted from the latest committed status snapshot.
+/// When a test has a per-test baseline pointing to commit X, history checking
+/// for that test starts at X. The test's first appearance at or after X is
+/// grandfathered, just like tests in the first committed status snapshot.
 pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
     use crate::status::TestState;
 
@@ -70,7 +69,7 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
 
     let first_snapshot_commit = snapshots.first().map(|s| s.commit.clone());
 
-    // Collect per-test baselines from the latest snapshot (current status file).
+    // Collect per-test baselines from the latest committed status snapshot.
     let per_test_baselines: BTreeMap<String, String> = snapshots
         .last()
         .map(|s| {
@@ -102,15 +101,15 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
                 continue;
             }
 
-            // Check if grandfathered by global baseline
-            let is_global_grandfathered = first_snapshot_commit
+            // Check if grandfathered by the first committed status snapshot.
+            let is_first_snapshot_grandfathered = first_snapshot_commit
                 .as_ref()
                 .is_some_and(|first| &snapshot.commit == first);
 
-            // Check if grandfathered by per-test baseline.
+            // Check if grandfathered by a per-test baseline.
             // A per-test baseline at commit X means: the test's first appearance
-            // at or after X is grandfathered. If the baseline commit isn't in the
-            // snapshots (had no status file), everything is considered "after" it.
+            // at or after X is grandfathered. If X isn't in the committed status
+            // snapshots, everything is considered "after" it.
             let is_per_test_grandfathered = per_test_baselines.get(test_name).is_some_and(|ptb| {
                 let snapshot_idx = commit_index.get(snapshot.commit.as_str());
                 let baseline_idx = commit_index.get(ptb.as_str());
@@ -125,7 +124,7 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
 
             let is_gatekeeper = test_name.ends_with(GATEKEEPER_TEST_NAME);
 
-            if !is_global_grandfathered && !is_per_test_grandfathered && !is_gatekeeper {
+            if !is_first_snapshot_grandfathered && !is_per_test_grandfathered && !is_gatekeeper {
                 violations.push(HistoryViolation::SkippedPending {
                     test: test_name.clone(),
                     commit: snapshot.commit.clone(),

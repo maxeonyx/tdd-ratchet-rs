@@ -60,8 +60,6 @@ pub struct StatusFile {
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     schema: Option<String>,
     pub tests: BTreeMap<String, TestEntry>,
-    #[serde(rename = "baseline", default, skip_serializing)]
-    legacy_baseline: Option<String>,
 }
 
 impl StatusFile {
@@ -69,7 +67,6 @@ impl StatusFile {
         StatusFile {
             schema: None,
             tests,
-            legacy_baseline: None,
         }
     }
 
