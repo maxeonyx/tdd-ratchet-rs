@@ -79,20 +79,15 @@ impl StatusFile {
         Self::new(BTreeMap::new(), None)
     }
 
-    pub fn load(path: &Path) -> Result<Self, StatusFileError> {
+    pub fn read_from_path(path: &Path) -> Result<Self, StatusFileError> {
         let contents = std::fs::read_to_string(path).map_err(|e| StatusFileError::Io {
             path: path.to_path_buf(),
             source: e,
         })?;
-        let status: StatusFile =
-            serde_json::from_str(&contents).map_err(|e| StatusFileError::Parse {
-                path: path.to_path_buf(),
-                source: e,
-            })?;
-        Ok(status)
+        Self::parse_from_str(&contents, path)
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), StatusFileError> {
+    pub fn write_to_path(&self, path: &Path) -> Result<(), StatusFileError> {
         // Always write the $schema key
         let mut with_schema = self.clone();
         with_schema.schema = Some(SCHEMA_URL.to_string());
@@ -106,6 +101,21 @@ impl StatusFile {
             source: e,
         })?;
         Ok(())
+    }
+
+    pub fn parse_from_str(contents: &str, path: &Path) -> Result<Self, StatusFileError> {
+        serde_json::from_str(contents).map_err(|e| StatusFileError::Parse {
+            path: path.to_path_buf(),
+            source: e,
+        })
+    }
+
+    pub fn load(path: &Path) -> Result<Self, StatusFileError> {
+        Self::read_from_path(path)
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), StatusFileError> {
+        self.write_to_path(path)
     }
 }
 
