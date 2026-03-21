@@ -220,6 +220,106 @@ fn my_feature_test() {
 }
 
 #[test]
+fn uncommitted_status_file_edits_do_not_change_ratchet_input() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    fs::write(
+        dir.path().join("tests/bypass.rs"),
+        r#"
+#[test]
+fn looks_pending_but_never_committed() {
+    assert!(true);
+}
+"#,
+    )
+    .unwrap();
+
+    let status_path = dir.path().join(".test-status.json");
+    let mut edited_status: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+    edited_status["tests"]["test-project::bypass$looks_pending_but_never_committed"] =
+        serde_json::Value::String("pending".to_string());
+    fs::write(
+        &status_path,
+        serde_json::to_string_pretty(&edited_status).unwrap() + "\n",
+    )
+    .unwrap();
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "Ratchet should ignore uncommitted status edit: {out}");
+    assert!(
+        out.contains("looks_pending_but_never_committed"),
+        "Should reject the passing test based on committed input: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn first_run_without_committed_status_accepts_failing_test() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    add_gatekeeper(dir.path());
+    fs::write(
+        dir.path().join("tests/new_feature.rs"),
+        r#"
+#[test]
+fn starts_failing() {
+    panic!("not implemented yet");
+}
+"#,
+    )
+    .unwrap();
+    git_add_commit(dir.path(), "Add gatekeeper and failing test");
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Fresh start should accept a new failing test: {out}");
+
+    let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        status.contains("starts_failing") && status.contains("pending"),
+        "Fresh start should write pending status: {status}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn first_run_without_committed_status_rejects_passing_test() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    add_gatekeeper(dir.path());
+    fs::write(
+        dir.path().join("tests/cheater.rs"),
+        r#"
+#[test]
+fn passes_on_first_run() {
+    assert!(true);
+}
+"#,
+    )
+    .unwrap();
+    git_add_commit(dir.path(), "Add gatekeeper and passing test");
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "Fresh start should reject a new passing test: {out}");
+    assert!(
+        out.contains("passes_on_first_run"),
+        "Should name the passing test from the fresh start run: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
 fn rejects_test_that_passes_immediately() {
     build_ratchet_binary();
     let dir = TestDir::new();
@@ -479,8 +579,8 @@ fn sneaky_test() {
 #[test]
 fn adoption_existing_project_grandfathers_tests() {
     // When adopting tdd-ratchet into an existing project that already has
-    // passing tests, --init should record a baseline so those tests are
-    // grandfathered and don't trigger history violations.
+    // passing tests, the first committed status snapshot should grandfather
+    // those tests and avoid history violations.
     build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
@@ -519,7 +619,7 @@ fn tdd_ratchet_gatekeeper() {
     git_add_commit(dir.path(), "Adopt tdd-ratchet");
 
     // Run ratchet — legacy_test passes immediately but should be
-    // accepted because it predates the baseline
+    // accepted because it was present in the first committed status snapshot
     let (ok, out) = run_ratchet(dir.path());
     assert!(ok, "Ratchet should accept grandfathered test: {out}");
 
