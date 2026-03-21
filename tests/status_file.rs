@@ -83,6 +83,16 @@ fn unknown_fields_are_rejected() {
 }
 
 #[test]
+fn legacy_global_baseline_field_is_rejected() {
+    let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
+    let result: Result<StatusFile, _> = serde_json::from_str(json);
+    assert!(
+        result.is_err(),
+        "Global baseline should no longer be accepted"
+    );
+}
+
+#[test]
 fn schema_field_is_accepted() {
     let json = r#"{"$schema":"https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json","tests":{"a":"passing"}}"#;
     let status: StatusFile = serde_json::from_str(json).unwrap();

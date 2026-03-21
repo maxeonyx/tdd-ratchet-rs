@@ -158,7 +158,7 @@ fn per_test_baseline_grandfathers_individual_test() {
     fs::write(dir.path().join("README.md"), "hello").unwrap();
     commit(dir.path(), "Initial");
 
-    // Commit 2: first status snapshot. This is the implicit global baseline.
+    // Commit 2: first status snapshot. This is the implicit project baseline.
     write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
     commit(dir.path(), "Add first status snapshot");
 

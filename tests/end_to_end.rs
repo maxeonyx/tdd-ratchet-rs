@@ -49,6 +49,10 @@ fn build_ratchet_binary() {
     assert!(status.success(), "Failed to build tdd-ratchet binary");
 }
 
+fn set_test_file(dir: &Path, file_name: &str, body: &str) {
+    fs::write(dir.join("tests").join(file_name), body).unwrap();
+}
+
 /// Create a minimal Rust project with git repo in the given dir.
 fn create_test_project(dir: &Path) {
     // Init git repo
@@ -139,8 +143,8 @@ fn run_ratchet_init(dir: &Path) -> (bool, String) {
     (output.status.success(), out)
 }
 
-/// Add the gatekeeper test to a test project. Must be called before the
-/// first `run_ratchet()` — the ratchet requires the gatekeeper to be present.
+/// Add the gatekeeper test to a test project.
+/// Fresh-start runs still require the gatekeeper before they can succeed.
 fn add_gatekeeper(dir: &Path) {
     fs::write(
         dir.join("tests/gatekeeper.rs"),
@@ -268,16 +272,16 @@ fn first_run_without_committed_status_accepts_failing_test() {
     create_test_project(dir.path());
 
     add_gatekeeper(dir.path());
-    fs::write(
-        dir.path().join("tests/new_feature.rs"),
+    set_test_file(
+        dir.path(),
+        "new_feature.rs",
         r#"
 #[test]
 fn starts_failing() {
     panic!("not implemented yet");
 }
 "#,
-    )
-    .unwrap();
+    );
     git_add_commit(dir.path(), "Add gatekeeper and failing test");
 
     let (ok, out) = run_ratchet(dir.path());
@@ -297,16 +301,16 @@ fn first_run_without_committed_status_rejects_passing_test() {
     create_test_project(dir.path());
 
     add_gatekeeper(dir.path());
-    fs::write(
-        dir.path().join("tests/cheater.rs"),
+    set_test_file(
+        dir.path(),
+        "cheater.rs",
         r#"
 #[test]
 fn passes_on_first_run() {
     assert!(true);
 }
 "#,
-    )
-    .unwrap();
+    );
     git_add_commit(dir.path(), "Add gatekeeper and passing test");
 
     let (ok, out) = run_ratchet(dir.path());

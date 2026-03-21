@@ -11,7 +11,7 @@ Read [PLAN.md](PLAN.md) for stories, state machine, algorithm, and design decisi
 4. **Update PLAN.md** after completing each story.
 5. **Commit and push frequently.**
 
-Note: tdd-ratchet cannot use itself until it's built. Use plain `cargo test` during development. Once functional, dogfood it.
+Note: tdd-ratchet cannot use itself until it's built. During development, run `TDD_RATCHET=1 cargo test` so the gatekeeper test passes. Once functional, dogfood it.
 
 ## Test isolation
 

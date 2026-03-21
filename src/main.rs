@@ -5,8 +5,8 @@ use std::process::{self, Command, Stdio};
 use tdd_ratchet::errors::format_report;
 use tdd_ratchet::history::{collect_history_snapshots, read_head_status};
 use tdd_ratchet::ratchet::evaluate;
-use tdd_ratchet::runner::parse_nextest_output;
-use tdd_ratchet::status::StatusFile;
+use tdd_ratchet::runner::{parse_nextest_output, TestOutcome, TestResult};
+use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
 
 struct GatheredRun {
     status: StatusFile,
@@ -42,21 +42,7 @@ fn init(status_path: &Path, project_dir: &Path) {
     let mut status = StatusFile::empty();
 
     // Run tests and snapshot existing results into the status file
-    let results = run_nextest(project_dir, false);
-    for result in &results {
-        if result.outcome == tdd_ratchet::runner::TestOutcome::Ignored {
-            continue;
-        }
-        let state = match result.outcome {
-            tdd_ratchet::runner::TestOutcome::Passed => tdd_ratchet::status::TestState::Passing,
-            tdd_ratchet::runner::TestOutcome::Failed => tdd_ratchet::status::TestState::Pending,
-            tdd_ratchet::runner::TestOutcome::Ignored => unreachable!(),
-        };
-        status.tests.insert(
-            result.name.clone(),
-            tdd_ratchet::status::TestEntry::Simple(state),
-        );
-    }
+    status.tests = status_entries_from_results(&run_nextest(project_dir, false));
 
     status.write_to_path(status_path).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to create status file: {e}");
@@ -77,7 +63,7 @@ fn init(status_path: &Path, project_dir: &Path) {
 }
 
 fn run_ratchet(project_dir: &Path, status_path: &Path) {
-    let gathered = gather_run(project_dir, status_path);
+    let gathered = gather_run(project_dir);
 
     // ── Phase 2: Evaluate (pure) ────────────────────────────────────
     let result = evaluate(
@@ -107,8 +93,8 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
     }
 }
 
-fn gather_run(project_dir: &Path, status_path: &Path) -> GatheredRun {
-    let status = load_status_input(project_dir, status_path);
+fn gather_run(project_dir: &Path) -> GatheredRun {
+    let status = load_status_input(project_dir);
     let results = run_nextest(project_dir, true);
     let history_snapshots = collect_history_snapshots(project_dir).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to inspect git history: {e}");
@@ -122,7 +108,7 @@ fn gather_run(project_dir: &Path, status_path: &Path) -> GatheredRun {
     }
 }
 
-fn load_status_input(project_dir: &Path, _status_path: &Path) -> StatusFile {
+fn load_status_input(project_dir: &Path) -> StatusFile {
     read_head_status(project_dir)
         .unwrap_or_else(|e| {
             eprintln!("tdd-ratchet: failed to read committed status file: {e}");
@@ -131,7 +117,24 @@ fn load_status_input(project_dir: &Path, _status_path: &Path) -> StatusFile {
         .unwrap_or_else(StatusFile::empty)
 }
 
-fn run_nextest(project_dir: &Path, inherit_stderr: bool) -> Vec<tdd_ratchet::runner::TestResult> {
+fn status_entries_from_results(
+    results: &[TestResult],
+) -> std::collections::BTreeMap<String, TestEntry> {
+    results
+        .iter()
+        .filter_map(|result| match result.outcome {
+            TestOutcome::Passed => {
+                Some((result.name.clone(), TestEntry::Simple(TestState::Passing)))
+            }
+            TestOutcome::Failed => {
+                Some((result.name.clone(), TestEntry::Simple(TestState::Pending)))
+            }
+            TestOutcome::Ignored => None,
+        })
+        .collect()
+}
+
+fn run_nextest(project_dir: &Path, inherit_stderr: bool) -> Vec<TestResult> {
     let mut command = Command::new("cargo");
     command
         .args([
