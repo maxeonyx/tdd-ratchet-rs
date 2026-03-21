@@ -2,7 +2,7 @@
 //
 // Stories 5, 6, 7: The core ratchet rules.
 
-use tdd_ratchet::ratchet::{check_ratchet, RatchetViolation};
+use tdd_ratchet::ratchet::{check_ratchet, evaluate, RatchetViolation};
 use tdd_ratchet::runner::{TestOutcome, TestResult};
 use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
 
@@ -209,6 +209,42 @@ fn promoting_test_preserves_baseline_metadata() {
     assert!(outcome.violations.is_empty());
     assert_eq!(
         outcome.updated.tests["my_test"],
+        TestEntry::WithBaseline {
+            state: TestState::Passing,
+            baseline: "abc123".to_string(),
+        }
+    );
+}
+
+#[test]
+fn renamed_test_is_not_treated_as_new_or_missing() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "old_test": {
+      "state": "passing",
+      "baseline": "abc123"
+    }
+  },
+  "renames": {
+    "new_test": "old_test"
+  }
+}"#,
+    )
+    .expect("rename support should parse");
+    let tr = results(&[("new_test", TestOutcome::Passed)]);
+
+    let outcome = evaluate(&sf, &tr, &[]);
+
+    assert!(
+        outcome.violations.is_empty(),
+        "Renamed tracked test should not be treated as new or missing: {:?}",
+        outcome.violations
+    );
+    assert!(!outcome.updated.tests.contains_key("old_test"));
+    assert!(outcome.updated.tests.contains_key("new_test"));
+    assert_eq!(
+        outcome.updated.tests["new_test"],
         TestEntry::WithBaseline {
             state: TestState::Passing,
             baseline: "abc123".to_string(),

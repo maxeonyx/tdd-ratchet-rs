@@ -211,6 +211,71 @@ fn save_preserves_per_test_baseline_as_object() {
 }
 
 #[test]
+fn status_file_with_renames_loads_and_round_trips() {
+    let dir = TestDir::new();
+    let path = dir.path().join(".test-status.json");
+
+    fs::write(
+        &path,
+        r#"{
+  "tests": {
+    "new_test": "passing"
+  },
+  "renames": {
+    "new_test": "old_test"
+  }
+}
+"#,
+    )
+    .unwrap();
+
+    let status = StatusFile::load(&path).unwrap();
+    assert_eq!(status.tests["new_test"].state(), TestState::Passing);
+
+    status.save(&path).unwrap();
+    let round_trip = fs::read_to_string(&path).unwrap();
+    assert!(
+        round_trip.contains("\"renames\""),
+        "Saved file should preserve renames: {round_trip}"
+    );
+    assert!(
+        round_trip.contains(r#""new_test": "old_test""#),
+        "Saved file should preserve rename mapping: {round_trip}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn schema_accepts_renames_section() {
+    let schema_str = fs::read_to_string("docs/schema/test-status.v1.json")
+        .expect("Schema file should exist at docs/schema/test-status.v1.json");
+    let schema: serde_json::Value = serde_json::from_str(&schema_str).unwrap();
+
+    let instance = serde_json::json!({
+        "tests": {
+            "new_test": "passing"
+        },
+        "renames": {
+            "new_test": "old_test"
+        }
+    });
+
+    let validator =
+        jsonschema::validator_for(&schema).expect("Schema should be a valid JSON Schema");
+
+    let errors: Vec<_> = validator.iter_errors(&instance).collect();
+    assert!(
+        errors.is_empty(),
+        "Schema should accept renames section:\n{}",
+        errors
+            .iter()
+            .map(|e| format!("  - {e}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+#[test]
 fn schema_validates_status_file() {
     let schema_str = fs::read_to_string("docs/schema/test-status.v1.json")
         .expect("Schema file should exist at docs/schema/test-status.v1.json");
