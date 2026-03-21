@@ -1,9 +1,22 @@
 // Core ratchet logic: compare status file against test results, produce violations.
 
-use crate::history::{HistorySnapshot, HistoryViolation, check_history_snapshots};
+use crate::history::{check_history_snapshots, HistorySnapshot, HistoryViolation};
 use crate::runner::{TestOutcome, TestResult};
 use crate::status::{StatusFile, TestEntry, TestState};
 use std::collections::BTreeSet;
+
+#[derive(Debug, Clone)]
+struct TransitionOutcome {
+    violations: Vec<TransitionViolation>,
+    updated: StatusFile,
+}
+
+#[derive(Debug, Clone)]
+enum TransitionViolation {
+    NewTestPassed { test: String },
+    Regression { test: String },
+    TestDisappeared { test: String },
+}
 
 /// The gatekeeper test name. This test is special-cased: it's allowed to
 /// pass immediately without going through the pending state, because the
@@ -44,7 +57,6 @@ pub fn evaluate(
     history_snapshots: &[HistorySnapshot],
 ) -> EvalResult {
     let mut violations = Vec::new();
-    let mut updated = status.clone();
 
     // 1. Check gatekeeper presence
     let has_gatekeeper = results
@@ -55,58 +67,19 @@ pub fn evaluate(
     }
 
     // 2. Apply ratchet rules (state transitions)
-    let seen_names: BTreeSet<&str> = results.iter().map(|r| r.name.as_str()).collect();
-
-    for result in results {
-        match (
-            status.tests.get(&result.name).map(|e| e.state()),
-            result.outcome,
-        ) {
-            // New test (not in status file)
-            (None, TestOutcome::Failed) => {
-                updated
-                    .tests
-                    .insert(result.name.clone(), TestEntry::Simple(TestState::Pending));
-            }
-            (None, TestOutcome::Passed) => {
-                if result.name.ends_with(GATEKEEPER_TEST_NAME) {
-                    updated
-                        .tests
-                        .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
-                } else {
-                    violations.push(Violation::NewTestPassed {
-                        test: result.name.clone(),
-                    });
+    let transition_outcome = apply_transitions(status, results);
+    violations.extend(
+        transition_outcome
+            .violations
+            .into_iter()
+            .map(|violation| match violation {
+                TransitionViolation::NewTestPassed { test } => Violation::NewTestPassed { test },
+                TransitionViolation::Regression { test } => Violation::Regression { test },
+                TransitionViolation::TestDisappeared { test } => {
+                    Violation::TestDisappeared { test }
                 }
-            }
-            (None, TestOutcome::Ignored) => {}
-
-            // Pending test
-            (Some(TestState::Pending), TestOutcome::Failed) => {}
-            (Some(TestState::Pending), TestOutcome::Passed) => {
-                updated
-                    .tests
-                    .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
-            }
-            (Some(TestState::Pending), TestOutcome::Ignored) => {}
-
-            // Passing test
-            (Some(TestState::Passing), TestOutcome::Passed) => {}
-            (Some(TestState::Passing), TestOutcome::Failed) => {
-                violations.push(Violation::Regression {
-                    test: result.name.clone(),
-                });
-            }
-            (Some(TestState::Passing), TestOutcome::Ignored) => {}
-        }
-    }
-
-    // Check for disappeared tests
-    for name in status.tests.keys() {
-        if !seen_names.contains(name.as_str()) {
-            violations.push(Violation::TestDisappeared { test: name.clone() });
-        }
-    }
+            }),
+    );
 
     // 3. Check git history
     let history_violations = check_history_snapshots(history_snapshots, status.baseline.is_some());
@@ -120,7 +93,7 @@ pub fn evaluate(
 
     EvalResult {
         violations,
-        updated,
+        updated: transition_outcome.updated,
     }
 }
 
@@ -147,6 +120,27 @@ pub enum RatchetViolation {
 /// This is the original per-rule check without history or gatekeeper.
 /// Used by unit tests in state_transitions.rs.
 pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutcome {
+    let transition_outcome = apply_transitions(status, results);
+
+    let violations = transition_outcome
+        .violations
+        .into_iter()
+        .map(|violation| match violation {
+            TransitionViolation::NewTestPassed { test } => RatchetViolation::NewTestPassed { test },
+            TransitionViolation::Regression { test } => RatchetViolation::Regression { test },
+            TransitionViolation::TestDisappeared { test } => {
+                RatchetViolation::TestDisappeared { test }
+            }
+        })
+        .collect();
+
+    RatchetOutcome {
+        violations,
+        updated: transition_outcome.updated,
+    }
+}
+
+fn apply_transitions(status: &StatusFile, results: &[TestResult]) -> TransitionOutcome {
     let mut violations = Vec::new();
     let mut updated = status.clone();
 
@@ -168,7 +162,7 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
                         .tests
                         .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
                 } else {
-                    violations.push(RatchetViolation::NewTestPassed {
+                    violations.push(TransitionViolation::NewTestPassed {
                         test: result.name.clone(),
                     });
                 }
@@ -183,7 +177,7 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
             (Some(TestState::Pending), TestOutcome::Ignored) => {}
             (Some(TestState::Passing), TestOutcome::Passed) => {}
             (Some(TestState::Passing), TestOutcome::Failed) => {
-                violations.push(RatchetViolation::Regression {
+                violations.push(TransitionViolation::Regression {
                     test: result.name.clone(),
                 });
             }
@@ -193,11 +187,11 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
 
     for name in status.tests.keys() {
         if !seen_names.contains(name.as_str()) {
-            violations.push(RatchetViolation::TestDisappeared { test: name.clone() });
+            violations.push(TransitionViolation::TestDisappeared { test: name.clone() });
         }
     }
 
-    RatchetOutcome {
+    TransitionOutcome {
         violations,
         updated,
     }
