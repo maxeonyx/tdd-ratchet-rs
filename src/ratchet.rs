@@ -2,7 +2,7 @@
 
 use crate::history::{check_history_snapshots, HistorySnapshot, HistoryViolation};
 use crate::runner::{TestOutcome, TestResult};
-use crate::status::{StatusFile, TestEntry, TestState};
+use crate::status::{StatusFile, TestState};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
@@ -144,23 +144,16 @@ fn apply_transitions(status: &StatusFile, results: &[TestResult]) -> TransitionO
     let mut violations = Vec::new();
     let mut updated = status.clone();
 
-    let seen_names: BTreeSet<&str> = results.iter().map(|r| r.name.as_str()).collect();
+    let seen_names = observed_test_names(results);
 
     for result in results {
-        match (
-            status.tests.get(&result.name).map(|e| e.state()),
-            result.outcome,
-        ) {
+        match (tracked_test_state(status, &result.name), result.outcome) {
             (None, TestOutcome::Failed) => {
-                updated
-                    .tests
-                    .insert(result.name.clone(), TestEntry::Simple(TestState::Pending));
+                updated.set_test_state(result.name.clone(), TestState::Pending);
             }
             (None, TestOutcome::Passed) => {
                 if result.name.ends_with(GATEKEEPER_TEST_NAME) {
-                    updated
-                        .tests
-                        .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
+                    updated.set_test_state(result.name.clone(), TestState::Passing);
                 } else {
                     violations.push(TransitionViolation::NewTestPassed {
                         test: result.name.clone(),
@@ -170,9 +163,7 @@ fn apply_transitions(status: &StatusFile, results: &[TestResult]) -> TransitionO
             (None, TestOutcome::Ignored) => {}
             (Some(TestState::Pending), TestOutcome::Failed) => {}
             (Some(TestState::Pending), TestOutcome::Passed) => {
-                updated
-                    .tests
-                    .insert(result.name.clone(), TestEntry::Simple(TestState::Passing));
+                updated.set_test_state(result.name.clone(), TestState::Passing);
             }
             (Some(TestState::Pending), TestOutcome::Ignored) => {}
             (Some(TestState::Passing), TestOutcome::Passed) => {}
@@ -185,14 +176,31 @@ fn apply_transitions(status: &StatusFile, results: &[TestResult]) -> TransitionO
         }
     }
 
-    for name in status.tests.keys() {
-        if !seen_names.contains(name.as_str()) {
-            violations.push(TransitionViolation::TestDisappeared { test: name.clone() });
-        }
-    }
+    violations.extend(
+        missing_tracked_tests(status, &seen_names)
+            .map(|test| TransitionViolation::TestDisappeared { test: test.clone() }),
+    );
 
     TransitionOutcome {
         violations,
         updated,
     }
+}
+
+fn observed_test_names(results: &[TestResult]) -> BTreeSet<&str> {
+    results.iter().map(|result| result.name.as_str()).collect()
+}
+
+fn tracked_test_state(status: &StatusFile, test_name: &str) -> Option<TestState> {
+    status.tests.get(test_name).map(|entry| entry.state())
+}
+
+fn missing_tracked_tests<'a>(
+    status: &'a StatusFile,
+    seen_names: &BTreeSet<&str>,
+) -> impl Iterator<Item = &'a String> {
+    status
+        .tests
+        .keys()
+        .filter(move |name| !seen_names.contains(name.as_str()))
 }

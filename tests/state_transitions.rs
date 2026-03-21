@@ -188,3 +188,30 @@ fn ignored_tests_are_not_counted_as_disappeared() {
         outcome.violations
     );
 }
+
+#[test]
+fn promoting_test_preserves_baseline_metadata() {
+    let sf = StatusFile::new(
+        [(
+            "my_test".to_string(),
+            TestEntry::WithBaseline {
+                state: TestState::Pending,
+                baseline: "abc123".to_string(),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    );
+    let tr = results(&[("my_test", TestOutcome::Passed)]);
+
+    let outcome = check_ratchet(&sf, &tr);
+
+    assert!(outcome.violations.is_empty());
+    assert_eq!(
+        outcome.updated.tests["my_test"],
+        TestEntry::WithBaseline {
+            state: TestState::Passing,
+            baseline: "abc123".to_string(),
+        }
+    );
+}
