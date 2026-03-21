@@ -160,6 +160,30 @@ fn tdd_ratchet_gatekeeper() {
     .unwrap();
 }
 
+fn set_status_renames(dir: &Path, renames: &[(&str, &str)]) {
+    let status_path = dir.join(".test-status.json");
+    let mut status: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+
+    let renames_object = renames
+        .iter()
+        .map(|(new_name, old_name)| {
+            (
+                (*new_name).to_string(),
+                serde_json::Value::String((*old_name).to_string()),
+            )
+        })
+        .collect();
+
+    status["renames"] = serde_json::Value::Object(renames_object);
+
+    fs::write(
+        &status_path,
+        serde_json::to_string_pretty(&status).unwrap() + "\n",
+    )
+    .unwrap();
+}
+
 #[test]
 fn init_creates_empty_status_file() {
     build_ratchet_binary();
@@ -220,6 +244,88 @@ fn my_feature_test() {
     let (ok, out) = run_ratchet(dir.path());
     assert!(ok, "Ratchet should accept now-passing test: {out}");
     git_add_commit(dir.path(), "Implement feature");
+    dir.pass();
+}
+
+#[test]
+fn rename_commit_transfers_test_identity() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    set_test_file(
+        dir.path(),
+        "rename_me.rs",
+        r#"
+#[test]
+fn old_name() {
+    panic!("not implemented yet");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Old failing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Add failing test");
+
+    set_test_file(
+        dir.path(),
+        "rename_me.rs",
+        r#"
+#[test]
+fn old_name() {
+    assert!(true);
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Old test should promote to passing: {out}");
+    git_add_commit(dir.path(), "Make test pass");
+
+    set_test_file(
+        dir.path(),
+        "rename_me.rs",
+        r#"
+#[test]
+fn new_name() {
+    assert!(true);
+}
+"#,
+    );
+    set_status_renames(
+        dir.path(),
+        &[(
+            "test-project::rename_me$new_name",
+            "test-project::rename_me$old_name",
+        )],
+    );
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Rename commit should succeed: {out}");
+
+    let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        status.contains("test-project::rename_me$new_name"),
+        "Renamed test should be tracked under the new name: {status}"
+    );
+    assert!(
+        !status.contains("test-project::rename_me$old_name"),
+        "Old test name should be removed after rename: {status}"
+    );
+    assert!(
+        status.contains("\"renames\""),
+        "Rename commit should preserve renames for history: {status}"
+    );
+    assert!(
+        out.contains("remove") && out.contains("renames"),
+        "Rename commit should warn that renames can be removed: {out}"
+    );
+
+    git_add_commit(dir.path(), "Rename tracked test");
     dir.pass();
 }
 
@@ -353,6 +459,63 @@ fn cheater_test() {
     assert!(
         out.contains("cheater_test"),
         "Should name the offending test: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn rename_is_rejected_when_old_name_still_appears_in_results() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    set_test_file(
+        dir.path(),
+        "rename_conflict.rs",
+        r#"
+#[test]
+fn old_name() {
+    panic!("not implemented yet");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Old failing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Add failing test");
+
+    set_test_file(
+        dir.path(),
+        "rename_conflict.rs",
+        r#"
+#[test]
+fn old_name() {
+    panic!("still here");
+}
+
+#[test]
+fn new_name() {
+    panic!("new name should not coexist with old one");
+}
+"#,
+    );
+    set_status_renames(
+        dir.path(),
+        &[(
+            "test-project::rename_conflict$new_name",
+            "test-project::rename_conflict$old_name",
+        )],
+    );
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "Rename should fail when old name still appears: {out}");
+    assert!(
+        out.contains("old_name") && out.contains("new_name"),
+        "Rename failure should mention both old and new names: {out}"
     );
     dir.pass();
 }
@@ -575,6 +738,70 @@ fn sneaky_test() {
     assert!(
         out.contains("sneaky_test"),
         "Should name the test that skipped pending: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn stale_rename_mapping_warns_but_does_not_fail() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    set_test_file(
+        dir.path(),
+        "rename_later.rs",
+        r#"
+#[test]
+fn old_name() {
+    panic!("not implemented yet");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Old failing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Add failing test");
+
+    set_test_file(
+        dir.path(),
+        "rename_later.rs",
+        r#"
+#[test]
+fn new_name() {
+    panic!("still pending after rename");
+}
+"#,
+    );
+    set_status_renames(
+        dir.path(),
+        &[(
+            "test-project::rename_later$new_name",
+            "test-project::rename_later$old_name",
+        )],
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Rename commit should succeed: {out}");
+    git_add_commit(dir.path(), "Rename pending test");
+
+    fs::write(dir.path().join("README.md"), "still here\n").unwrap();
+    set_status_renames(
+        dir.path(),
+        &[(
+            "test-project::rename_later$new_name",
+            "test-project::rename_later$old_name",
+        )],
+    );
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Stale rename should only warn: {out}");
+    assert!(
+        out.contains("stale") || out.contains("remove"),
+        "Stale rename should produce a warning: {out}"
     );
     dir.pass();
 }
