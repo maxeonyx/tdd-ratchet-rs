@@ -55,13 +55,13 @@ fn test_appeared_as_pending_then_passing_is_ok() {
     write_status(dir.path(), r#"{"tests":{"my_test":"passing"}}"#);
     commit(dir.path(), "Test now passes");
 
-    let violations = check_history(dir.path(), None).unwrap();
+    let violations = check_history(dir.path()).unwrap();
     assert!(violations.is_empty(), "Should be ok: {violations:?}");
     dir.pass();
 }
 
 #[test]
-fn test_appeared_as_passing_without_pending_is_rejected() {
+fn test_appeared_as_passing_in_first_status_snapshot_is_grandfathered() {
     let dir = TestDir::new();
     init_repo(dir.path());
 
@@ -69,16 +69,15 @@ fn test_appeared_as_passing_without_pending_is_rejected() {
     fs::write(dir.path().join("README.md"), "hello").unwrap();
     commit(dir.path(), "Initial");
 
-    // Commit 2: test appears directly as passing (skipped pending)
+    // Commit 2: first committed status file contains an existing passing test.
+    // Under story 13, the first status snapshot is the implicit baseline.
     write_status(dir.path(), r#"{"tests":{"cheater":"passing"}}"#);
     commit(dir.path(), "Add passing test");
 
-    let violations = check_history(dir.path(), None).unwrap();
+    let violations = check_history(dir.path()).unwrap();
     assert!(
-        violations.iter().any(
-            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "cheater")
-        ),
-        "Should reject: {violations:?}"
+        violations.is_empty(),
+        "First status snapshot should be grandfathered: {violations:?}"
     );
     dir.pass();
 }
@@ -98,7 +97,7 @@ fn test_pending_for_multiple_commits_then_passing_is_ok() {
     write_status(dir.path(), r#"{"tests":{"slow_test":"passing"}}"#);
     commit(dir.path(), "Test now passes");
 
-    let violations = check_history(dir.path(), None).unwrap();
+    let violations = check_history(dir.path()).unwrap();
     assert!(violations.is_empty(), "Should be ok: {violations:?}");
     dir.pass();
 }
@@ -120,7 +119,7 @@ fn first_status_snapshot_grandfathers_existing_tests() {
     );
     commit(dir.path(), "Add cheater after first snapshot");
 
-    let violations = check_history(dir.path(), None).unwrap();
+    let violations = check_history(dir.path()).unwrap();
     // old_test should be grandfathered by the first snapshot, new_cheater should be flagged
     assert!(
         !violations.iter().any(
@@ -145,7 +144,7 @@ fn no_status_file_in_history_is_ok() {
     fs::write(dir.path().join("README.md"), "hello").unwrap();
     commit(dir.path(), "Initial");
 
-    let violations = check_history(dir.path(), None).unwrap();
+    let violations = check_history(dir.path()).unwrap();
     assert!(violations.is_empty());
     dir.pass();
 }
@@ -155,12 +154,15 @@ fn per_test_baseline_grandfathers_individual_test() {
     let dir = TestDir::new();
     init_repo(dir.path());
 
-    // Commit 1: test appears as passing with a per-test baseline pointing to this commit
-    // (In real usage, user would set baseline to HEAD before committing)
+    // Commit 1: no status file yet.
     fs::write(dir.path().join("README.md"), "hello").unwrap();
     commit(dir.path(), "Initial");
 
-    // Get commit hash
+    // Commit 2: first status snapshot. This is the implicit global baseline.
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Add first status snapshot");
+
+    // Get a commit hash before the test appears, to use as a per-test baseline.
     let output = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .current_dir(dir.path())
@@ -170,15 +172,15 @@ fn per_test_baseline_grandfathers_individual_test() {
         .unwrap();
     let baseline_commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    // Commit 2: grandfathered_test appears as passing with per-test baseline,
-    // cheater_test appears as passing without any baseline
+    // Commit 3: grandfathered_test appears as passing with per-test baseline,
+    // cheater_test appears as passing without any baseline.
     let status_json = format!(
-        r#"{{"tests":{{"grandfathered":{{"state":"passing","baseline":"{baseline_commit}"}},"cheater":"passing"}}}}"#
+        r#"{{"tests":{{"existing":"passing","grandfathered":{{"state":"passing","baseline":"{baseline_commit}"}},"cheater":"passing"}}}}"#
     );
     write_status(dir.path(), &status_json);
     commit(dir.path(), "Add tests");
 
-    let violations = check_history(dir.path(), None).unwrap();
+    let violations = check_history(dir.path()).unwrap();
 
     // grandfathered should NOT be flagged (has per-test baseline)
     assert!(

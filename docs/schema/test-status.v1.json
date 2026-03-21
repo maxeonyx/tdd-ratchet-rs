@@ -41,11 +41,6 @@
           }
         ]
       }
-    },
-    "baseline": {
-      "type": "string",
-      "description": "Git commit hash at which the ratchet was initialized. Tests at or before this commit are grandfathered for history checks. Omit for new projects to check all history.",
-      "pattern": "^[0-9a-f]{40}$"
     }
   }
 }

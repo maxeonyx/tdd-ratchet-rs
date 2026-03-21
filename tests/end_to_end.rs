@@ -282,7 +282,6 @@ fn starts_failing() {
 
     let (ok, out) = run_ratchet(dir.path());
     assert!(ok, "Fresh start should accept a new failing test: {out}");
-
     let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
     assert!(
         status.contains("starts_failing") && status.contains("pending"),
@@ -655,22 +654,13 @@ fn full_setup_and_tdd_workflow_from_scratch() {
     let dir = TestDir::new();
     create_test_project(dir.path());
 
-    // Step 1: User tries to run ratchet without init.
-    // Ratchet fails with instructions to run --init.
-    let (ok, _out) = run_ratchet(dir.path());
-    assert!(!ok, "Should fail without status file");
-
-    // Step 2: User runs --init (as instructed by step 1's error message).
-    let (ok, out) = run_ratchet_init(dir.path());
-    assert!(ok, "init should succeed: {out}");
-    git_add_commit(dir.path(), "Initialize tdd-ratchet");
-
-    // Step 3: User runs ratchet. It fails because there's no gatekeeper
-    // test. The error message tells them exactly what to add.
+    // Step 1: User tries to run ratchet in a fresh project.
+    // With no committed status file yet, the ratchet behaves as a fresh start
+    // and fails because there's no gatekeeper test.
     let (ok, _out) = run_ratchet(dir.path());
     assert!(!ok, "Should fail without gatekeeper test");
 
-    // Step 4: User adds gatekeeper test (as instructed by step 3's error).
+    // Step 2: User adds gatekeeper test (as instructed by step 1's error).
     fs::write(
         dir.path().join("tests/gatekeeper.rs"),
         r#"
@@ -687,13 +677,14 @@ fn tdd_ratchet_gatekeeper() {
     )
     .unwrap();
 
-    // Step 5: Ratchet succeeds. The gatekeeper is special-cased — it's
-    // allowed to pass immediately (no pending state required).
+    // Step 3: Ratchet succeeds. The gatekeeper is special-cased — it's
+    // allowed to pass immediately (no pending state required). This creates
+    // the first committed-status output for the user to commit.
     let (ok, out) = run_ratchet(dir.path());
     assert!(ok, "Ratchet should accept gatekeeper: {out}");
     git_add_commit(dir.path(), "Add gatekeeper test");
 
-    // Step 6: Write a failing test for feature A.
+    // Step 4: Write a failing test for feature A.
     fs::write(
         dir.path().join("tests/feature_a.rs"),
         r#"
@@ -708,7 +699,7 @@ fn feature_a_works() {
     assert!(ok, "Ratchet should accept new failing test: {out}");
     git_add_commit(dir.path(), "Add failing test for feature A");
 
-    // Step 7: Implement feature A — test now passes, promoted.
+    // Step 5: Implement feature A — test now passes, promoted.
     fs::write(
         dir.path().join("tests/feature_a.rs"),
         r#"
@@ -723,7 +714,7 @@ fn feature_a_works() {
     assert!(ok, "Ratchet should promote feature_a to passing: {out}");
     git_add_commit(dir.path(), "Implement feature A");
 
-    // Step 8: Second feature — same cycle.
+    // Step 6: Second feature — same cycle.
     fs::write(
         dir.path().join("tests/feature_b.rs"),
         r#"
@@ -738,7 +729,7 @@ fn feature_b_works() {
     assert!(ok, "Ratchet should accept second failing test: {out}");
     git_add_commit(dir.path(), "Add failing test for feature B");
 
-    // Step 9: Implement feature B.
+    // Step 7: Implement feature B.
     fs::write(
         dir.path().join("tests/feature_b.rs"),
         r#"

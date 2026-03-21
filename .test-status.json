@@ -4,8 +4,8 @@
     "tdd-ratchet::bypass_prevention$cargo_test_with_ratchet_env_passes_gatekeeper": "passing",
     "tdd-ratchet::bypass_prevention$cargo_test_without_ratchet_env_fails_with_instructions": "passing",
     "tdd-ratchet::end_to_end$adoption_existing_project_grandfathers_tests": "passing",
-    "tdd-ratchet::end_to_end$first_run_without_committed_status_accepts_failing_test": "pending",
-    "tdd-ratchet::end_to_end$first_run_without_committed_status_rejects_passing_test": "pending",
+    "tdd-ratchet::end_to_end$first_run_without_committed_status_accepts_failing_test": "passing",
+    "tdd-ratchet::end_to_end$first_run_without_committed_status_rejects_passing_test": "passing",
     "tdd-ratchet::end_to_end$full_setup_and_tdd_workflow_from_scratch": "passing",
     "tdd-ratchet::end_to_end$happy_path_tdd_workflow": "passing",
     "tdd-ratchet::end_to_end$init_creates_empty_status_file": "passing",
@@ -14,20 +14,18 @@
     "tdd-ratchet::end_to_end$rejects_regression": "passing",
     "tdd-ratchet::end_to_end$rejects_test_that_passes_immediately": "passing",
     "tdd-ratchet::end_to_end$two_new_tests_one_passes_one_fails": "passing",
-    "tdd-ratchet::end_to_end$uncommitted_status_file_edits_do_not_change_ratchet_input": "pending",
+    "tdd-ratchet::end_to_end$uncommitted_status_file_edits_do_not_change_ratchet_input": "passing",
     "tdd-ratchet::end_to_end$zero_tests_project_succeeds": "passing",
     "tdd-ratchet::error_messages$all_violation_variants_are_covered": "passing",
     "tdd-ratchet::error_messages$new_test_passed_error_has_context_problem_suggestion": "passing",
     "tdd-ratchet::error_messages$regression_error_has_context_problem_suggestion": "passing",
     "tdd-ratchet::error_messages$test_disappeared_error_has_context_problem_suggestion": "passing",
     "tdd-ratchet::gatekeeper$tdd_ratchet_gatekeeper": "passing",
-    "tdd-ratchet::git_history$baseline_commit_grandfathers_existing_tests": "passing",
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
     "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {
       "state": "passing",
       "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
     },
-    "tdd-ratchet::git_history$test_appeared_as_passing_without_pending_is_rejected": "passing",
     "tdd-ratchet::git_history$test_appeared_as_pending_then_passing_is_ok": "passing",
     "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": "passing",
     "tdd-ratchet::state_transitions$empty_results_nonempty_status_all_rejected_as_missing": "passing",
@@ -73,6 +71,5 @@
     "tdd-ratchet::test_runner$parses_all_passing": "passing",
     "tdd-ratchet::test_runner$parses_deeply_nested_module_names": "passing",
     "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": "passing"
-  },
-  "baseline": "cc5c4b1fb388570ab67ed5a12adef943b0984f25"
+  }
 }

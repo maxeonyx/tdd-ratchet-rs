@@ -20,12 +20,9 @@ pub struct HistorySnapshot {
 
 /// Collect status file snapshots from git history.
 ///
-/// Returns snapshots from oldest to newest, starting from the baseline
-/// (inclusive) if set, or from the beginning of history.
-pub fn collect_history_snapshots(
-    repo_path: &Path,
-    baseline: Option<&str>,
-) -> Result<Vec<HistorySnapshot>, git2::Error> {
+/// Returns snapshots from oldest to newest for every commit that contains a
+/// committed .test-status.json. The first snapshot is the implicit baseline.
+pub fn collect_history_snapshots(repo_path: &Path) -> Result<Vec<HistorySnapshot>, git2::Error> {
     let repo = git2::Repository::open(repo_path)?;
 
     let mut snapshots = Vec::new();
@@ -34,26 +31,8 @@ pub fn collect_history_snapshots(
     revwalk.push_head()?;
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::REVERSE)?;
 
-    let baseline_oid = baseline.map(git2::Oid::from_str).transpose()?;
-    let mut past_baseline = baseline_oid.is_none();
-    let mut found_baseline = baseline_oid.is_none();
-
     for oid_result in revwalk {
         let oid = oid_result?;
-
-        if !past_baseline {
-            if Some(oid) == baseline_oid {
-                if let Some(sf) = status_file_at_commit(&repo, oid)? {
-                    snapshots.push(HistorySnapshot {
-                        commit: oid.to_string(),
-                        status: sf,
-                    });
-                }
-                past_baseline = true;
-                found_baseline = true;
-            }
-            continue;
-        }
 
         if let Some(sf) = status_file_at_commit(&repo, oid)? {
             snapshots.push(HistorySnapshot {
@@ -63,42 +42,33 @@ pub fn collect_history_snapshots(
         }
     }
 
-    if let Some(oid) = baseline_oid
-        && !found_baseline
-    {
-        return Err(git2::Error::from_str(&format!(
-            "Baseline commit {oid} was not found in HEAD history"
-        )));
-    }
-
     Ok(snapshots)
+}
+
+pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Error> {
+    let repo = git2::Repository::open(repo_path)?;
+    let head = repo.head()?.peel_to_commit()?;
+    status_file_at_commit(&repo, head.id())
 }
 
 /// Check history snapshots for TDD violations. Pure function — no IO.
 ///
 /// Verifies that every test that appears as "passing" had a prior
-/// appearance as "pending". Tests in the first snapshot (when a baseline
-/// is configured) are grandfathered. The gatekeeper test is always exempt.
+/// appearance as "pending". Tests in the first committed status snapshot are
+/// grandfathered. The gatekeeper test is always exempt.
 ///
 /// Per-test baselines: extracted from the *latest* snapshot (current status
 /// file). When a test has a per-test baseline pointing to commit X, history
 /// checking for that test starts at commit X. The test's first appearance
 /// at or after X is grandfathered — same as how the global baseline
 /// grandfathers all tests in its first snapshot.
-pub fn check_history_snapshots(
-    snapshots: &[HistorySnapshot],
-    has_baseline: bool,
-) -> Vec<HistoryViolation> {
+pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
     use crate::status::TestState;
 
     let mut first_seen: BTreeMap<String, (String, TestState)> = BTreeMap::new();
     let mut violations = Vec::new();
 
-    let first_snapshot_commit = if has_baseline {
-        snapshots.first().map(|s| s.commit.clone())
-    } else {
-        None
-    };
+    let first_snapshot_commit = snapshots.first().map(|s| s.commit.clone());
 
     // Collect per-test baselines from the latest snapshot (current status file).
     let per_test_baselines: BTreeMap<String, String> = snapshots
@@ -169,12 +139,9 @@ pub fn check_history_snapshots(
 
 /// Convenience: collect snapshots and check them in one call.
 /// Used by existing callers that don't need the split.
-pub fn check_history(
-    repo_path: &Path,
-    baseline: Option<&str>,
-) -> Result<Vec<HistoryViolation>, git2::Error> {
-    let snapshots = collect_history_snapshots(repo_path, baseline)?;
-    Ok(check_history_snapshots(&snapshots, baseline.is_some()))
+pub fn check_history(repo_path: &Path) -> Result<Vec<HistoryViolation>, git2::Error> {
+    let snapshots = collect_history_snapshots(repo_path)?;
+    Ok(check_history_snapshots(&snapshots))
 }
 
 /// Read .test-status.json from a specific commit's tree.

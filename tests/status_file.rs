@@ -14,7 +14,7 @@ fn make_status(tests: &[(&str, TestState)]) -> StatusFile {
     for (name, state) in tests {
         map.insert(name.to_string(), TestEntry::Simple(*state));
     }
-    StatusFile::new(map, None)
+    StatusFile::new(map)
 }
 
 #[test]
@@ -47,7 +47,6 @@ fn round_trip_write_then_read() {
 
     // save() injects $schema, so compare the fields we care about
     assert_eq!(original.tests, loaded.tests);
-    assert_eq!(original.baseline, loaded.baseline);
     dir.pass();
 }
 
@@ -190,7 +189,7 @@ fn save_preserves_per_test_baseline_as_object() {
             baseline: "abc123".to_string(),
         },
     );
-    let status = StatusFile::new(tests, None);
+    let status = StatusFile::new(tests);
     status.save(&path).unwrap();
 
     let loaded = StatusFile::load(&path).unwrap();

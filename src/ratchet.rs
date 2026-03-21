@@ -82,7 +82,7 @@ pub fn evaluate(
     );
 
     // 3. Check git history
-    let history_violations = check_history_snapshots(history_snapshots, status.baseline.is_some());
+    let history_violations = check_history_snapshots(history_snapshots);
     for hv in history_violations {
         match hv {
             HistoryViolation::SkippedPending { test, commit } => {
