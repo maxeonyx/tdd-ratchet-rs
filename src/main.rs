@@ -45,37 +45,20 @@ fn init(status_path: &Path, project_dir: &Path) {
     status.baseline = baseline;
 
     // Run tests and snapshot existing results into the status file
-    let output = Command::new("cargo")
-        .args([
-            "nextest",
-            "run",
-            "--no-fail-fast",
-            "--message-format",
-            "libtest-json",
-        ])
-        .current_dir(project_dir)
-        .env("TDD_RATCHET", "1")
-        .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1")
-        .output()
-        .ok();
-
-    if let Some(output) = output {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let results = parse_nextest_output(&stdout);
-        for result in &results {
-            if result.outcome == tdd_ratchet::runner::TestOutcome::Ignored {
-                continue;
-            }
-            let state = match result.outcome {
-                tdd_ratchet::runner::TestOutcome::Passed => tdd_ratchet::status::TestState::Passing,
-                tdd_ratchet::runner::TestOutcome::Failed => tdd_ratchet::status::TestState::Pending,
-                tdd_ratchet::runner::TestOutcome::Ignored => unreachable!(),
-            };
-            status.tests.insert(
-                result.name.clone(),
-                tdd_ratchet::status::TestEntry::Simple(state),
-            );
+    let results = run_nextest(project_dir, false);
+    for result in &results {
+        if result.outcome == tdd_ratchet::runner::TestOutcome::Ignored {
+            continue;
         }
+        let state = match result.outcome {
+            tdd_ratchet::runner::TestOutcome::Passed => tdd_ratchet::status::TestState::Passing,
+            tdd_ratchet::runner::TestOutcome::Failed => tdd_ratchet::status::TestState::Pending,
+            tdd_ratchet::runner::TestOutcome::Ignored => unreachable!(),
+        };
+        status.tests.insert(
+            result.name.clone(),
+            tdd_ratchet::status::TestEntry::Simple(state),
+        );
     }
 
     status.write_to_path(status_path).unwrap_or_else(|e| {

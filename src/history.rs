@@ -36,6 +36,7 @@ pub fn collect_history_snapshots(
 
     let baseline_oid = baseline.map(git2::Oid::from_str).transpose()?;
     let mut past_baseline = baseline_oid.is_none();
+    let mut found_baseline = baseline_oid.is_none();
 
     for oid_result in revwalk {
         let oid = oid_result?;
@@ -49,6 +50,7 @@ pub fn collect_history_snapshots(
                     });
                 }
                 past_baseline = true;
+                found_baseline = true;
             }
             continue;
         }
@@ -59,6 +61,14 @@ pub fn collect_history_snapshots(
                 status: sf,
             });
         }
+    }
+
+    if let Some(oid) = baseline_oid
+        && !found_baseline
+    {
+        return Err(git2::Error::from_str(&format!(
+            "Baseline commit {oid} was not found in HEAD history"
+        )));
     }
 
     Ok(snapshots)
