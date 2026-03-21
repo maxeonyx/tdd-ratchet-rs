@@ -94,8 +94,12 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
 }
 
 fn gather_run(project_dir: &Path) -> GatheredRun {
-    let mut status = load_status_input(project_dir);
-    status.renames = load_working_tree_renames(project_dir);
+    // Story 13 still holds for tracked test states: they come from HEAD.
+    // Story 12 adds a deliberate exception: working-tree `renames` act as an
+    // instruction channel for the current run, then are saved so history can
+    // see the bridge in the rename commit.
+    let mut status = load_committed_status_input(project_dir);
+    status.renames = load_working_tree_rename_instructions(project_dir);
     let results = run_nextest(project_dir, true);
     let history_snapshots = collect_history_snapshots(project_dir).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to inspect git history: {e}");
@@ -109,7 +113,7 @@ fn gather_run(project_dir: &Path) -> GatheredRun {
     }
 }
 
-fn load_status_input(project_dir: &Path) -> StatusFile {
+fn load_committed_status_input(project_dir: &Path) -> StatusFile {
     read_head_status(project_dir)
         .unwrap_or_else(|e| {
             eprintln!("tdd-ratchet: failed to read committed status file: {e}");
@@ -118,7 +122,9 @@ fn load_status_input(project_dir: &Path) -> StatusFile {
         .unwrap_or_else(StatusFile::empty)
 }
 
-fn load_working_tree_renames(project_dir: &Path) -> std::collections::BTreeMap<String, String> {
+fn load_working_tree_rename_instructions(
+    project_dir: &Path,
+) -> std::collections::BTreeMap<String, String> {
     let status_path = project_dir.join(".test-status.json");
     if !status_path.exists() {
         return std::collections::BTreeMap::new();

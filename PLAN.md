@@ -16,7 +16,7 @@
 9. ~~As a user of tdd-ratchet, I want ratchet-specific failures to explain the context (this project uses strict TDD via tdd-ratchet), what the problem is, and what to do about it.~~ ✅
 
 ### New user stories
-12. As a user of tdd-ratchet, I want to rename tests without the ratchet treating the new name as a brand-new test. A `renames` section in `.test-status.json` declares `old_name → new_name` mappings. The ratchet validates that the old name existed and the new name appears in test results, then transfers the state. After the rename commit, the ratchet warns that the renames section can be removed. If stale renames are left for more than one commit, the ratchet should warn (not error).
+12. ~~As a user of tdd-ratchet, I want to rename tests without the ratchet treating the new name as a brand-new test. A `renames` section in `.test-status.json` declares `old_name → new_name` mappings. The ratchet validates that the old name existed and the new name appears in test results, then transfers the state. After the rename commit, the ratchet warns that the renames section can be removed. If stale renames are left for more than one commit, the ratchet should warn (not error).~~ ✅
 13. ~~As a user of tdd-ratchet, I want the status file in my working tree to be *output only* — the ratchet reads its input from the last committed `.test-status.json` in git history (or the earliest commit containing it), not from the working tree. This prevents bypassing the ratchet by manually editing the status file. The baseline concept may be simplified or eliminated — if the ratchet walks back to the first commit that contains `.test-status.json`, that *is* the baseline.~~ ✅
 14. As a user of tdd-ratchet, I want the ratchet output to be self-documenting. When a violation occurs, it should explain: (a) why the ratchet exists (enforcing test-first discipline), (b) what the specific violation is, (c) what to do about it (e.g. rebase tests and implementation into separate commits). A first-time user encountering the ratchet should understand it without reading external docs.
 
@@ -95,10 +95,12 @@ detect which is available.
 Previous design: baseline is configured per-project. New design: the
 ratchet walks git history to find the earliest commit containing
 `.test-status.json` — that is the implicit baseline. No configuration
-needed. The working-tree status file is output only; the ratchet reads
-its input from the committed version in `HEAD` (or further back for
-history validation). This eliminates the bypass of manually editing the
-status file.
+needed. The ratchet reads tracked test states from the committed version
+in `HEAD` (or further back for history validation). The deliberate
+exception is story 12: working-tree `renames` are an instruction channel
+for the current run, then are saved into the rename commit so history can
+see the identity bridge. This still prevents bypassing the ratchet by
+manually editing tracked test states in the working tree.
 
 ### Bypass prevention discussion
 
