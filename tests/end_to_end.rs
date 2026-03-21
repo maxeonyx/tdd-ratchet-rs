@@ -581,6 +581,10 @@ fn fragile_test() {
         out.contains("fragile_test"),
         "Should name the regressed test: {out}"
     );
+    assert!(
+        out.contains("Why:") && out.contains("Problem:") && out.contains("What to do:"),
+        "Regression report should be self-documenting: {out}"
+    );
     dir.pass();
 }
 
