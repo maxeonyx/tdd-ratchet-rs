@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use tdd_ratchet::history::{HistoryViolation, check_history};
+use tdd_ratchet::history::{check_history, HistoryViolation};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -104,33 +104,24 @@ fn test_pending_for_multiple_commits_then_passing_is_ok() {
 }
 
 #[test]
-fn baseline_commit_grandfathers_existing_tests() {
+fn first_status_snapshot_grandfathers_existing_tests() {
     let dir = TestDir::new();
     init_repo(dir.path());
 
-    // Commit 1: test appears as passing (before baseline)
+    // Commit 1: first committed status file already contains an existing passing test.
+    // Under the story 13 model, this first snapshot is the implicit baseline.
     write_status(dir.path(), r#"{"tests":{"old_test":"passing"}}"#);
     commit(dir.path(), "Old test");
 
-    // Get that commit hash
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(dir.path())
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("HOME", dir.path())
-        .output()
-        .unwrap();
-    let baseline = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    // Commit 2: new test appears as passing (after baseline — violation)
+    // Commit 2: new test appears as passing after the first status snapshot — violation.
     write_status(
         dir.path(),
         r#"{"tests":{"old_test":"passing","new_cheater":"passing"}}"#,
     );
-    commit(dir.path(), "Add cheater after baseline");
+    commit(dir.path(), "Add cheater after first snapshot");
 
-    let violations = check_history(dir.path(), Some(&baseline)).unwrap();
-    // old_test should be grandfathered, new_cheater should be flagged
+    let violations = check_history(dir.path(), None).unwrap();
+    // old_test should be grandfathered by the first snapshot, new_cheater should be flagged
     assert!(
         !violations.iter().any(
             |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "old_test")
