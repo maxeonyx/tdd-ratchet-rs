@@ -1,7 +1,7 @@
 // Git history inspection: verify no test skipped the pending state.
 
 use crate::ratchet::GATEKEEPER_TEST_NAME;
-use crate::status::StatusFile;
+use crate::status::{StatusFile, TestState};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -62,9 +62,7 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
 /// for that test starts at X. The test's first appearance at or after X is
 /// grandfathered, just like tests in the first committed status snapshot.
 pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
-    use crate::status::TestState;
-
-    let mut first_seen: BTreeMap<String, (String, TestState)> = BTreeMap::new();
+    let mut first_seen = BTreeMap::new();
     let mut violations = Vec::new();
 
     let first_snapshot_commit = snapshots.first().map(|s| s.commit.clone());
@@ -90,41 +88,23 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
 
     for snapshot in snapshots {
         for (test_name, entry) in &snapshot.status.tests {
-            if first_seen.contains_key(test_name) {
+            if !mark_first_appearance(&mut first_seen, test_name) {
                 continue;
             }
 
             let state = entry.state();
-            first_seen.insert(test_name.clone(), (snapshot.commit.clone(), state));
 
             if state != TestState::Passing {
                 continue;
             }
 
-            // Check if grandfathered by the first committed status snapshot.
-            let is_first_snapshot_grandfathered = first_snapshot_commit
-                .as_ref()
-                .is_some_and(|first| &snapshot.commit == first);
-
-            // Check if grandfathered by a per-test baseline.
-            // A per-test baseline at commit X means: the test's first appearance
-            // at or after X is grandfathered. If X isn't in the committed status
-            // snapshots, everything is considered "after" it.
-            let is_per_test_grandfathered = per_test_baselines.get(test_name).is_some_and(|ptb| {
-                let snapshot_idx = commit_index.get(snapshot.commit.as_str());
-                let baseline_idx = commit_index.get(ptb.as_str());
-                match (snapshot_idx, baseline_idx) {
-                    // First appearance is at or after baseline — grandfathered
-                    (Some(&si), Some(&bi)) => si >= bi,
-                    // Baseline not in snapshots — everything is after it
-                    (Some(_), None) => true,
-                    _ => false,
-                }
-            });
-
-            let is_gatekeeper = test_name.ends_with(GATEKEEPER_TEST_NAME);
-
-            if !is_first_snapshot_grandfathered && !is_per_test_grandfathered && !is_gatekeeper {
+            if !is_grandfathered(
+                test_name,
+                &snapshot.commit,
+                first_snapshot_commit.as_deref(),
+                &per_test_baselines,
+                &commit_index,
+            ) {
                 violations.push(HistoryViolation::SkippedPending {
                     test: test_name.clone(),
                     commit: snapshot.commit.clone(),
@@ -134,6 +114,50 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
     }
 
     violations
+}
+
+fn mark_first_appearance(first_seen: &mut BTreeMap<String, ()>, test_name: &str) -> bool {
+    first_seen.insert(test_name.to_string(), ()).is_none()
+}
+
+fn is_grandfathered(
+    test_name: &str,
+    snapshot_commit: &str,
+    first_snapshot_commit: Option<&str>,
+    per_test_baselines: &BTreeMap<String, String>,
+    commit_index: &BTreeMap<&str, usize>,
+) -> bool {
+    is_gatekeeper(test_name)
+        || first_snapshot_commit.is_some_and(|first| snapshot_commit == first)
+        || is_grandfathered_by_per_test_baseline(
+            test_name,
+            snapshot_commit,
+            per_test_baselines,
+            commit_index,
+        )
+}
+
+fn is_gatekeeper(test_name: &str) -> bool {
+    test_name.ends_with(GATEKEEPER_TEST_NAME)
+}
+
+fn is_grandfathered_by_per_test_baseline(
+    test_name: &str,
+    snapshot_commit: &str,
+    per_test_baselines: &BTreeMap<String, String>,
+    commit_index: &BTreeMap<&str, usize>,
+) -> bool {
+    per_test_baselines
+        .get(test_name)
+        .is_some_and(|baseline_commit| {
+            let snapshot_idx = commit_index.get(snapshot_commit);
+            let baseline_idx = commit_index.get(baseline_commit.as_str());
+            match (snapshot_idx, baseline_idx) {
+                (Some(&snapshot_idx), Some(&baseline_idx)) => snapshot_idx >= baseline_idx,
+                (Some(_), None) => true,
+                _ => false,
+            }
+        })
 }
 
 /// Convenience: collect snapshots and check them in one call.

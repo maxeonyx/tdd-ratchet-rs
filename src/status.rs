@@ -45,6 +45,16 @@ impl TestEntry {
         }
     }
 
+    pub fn with_state(&self, state: TestState) -> Self {
+        match self {
+            TestEntry::Simple(_) => TestEntry::Simple(state),
+            TestEntry::WithBaseline { baseline, .. } => TestEntry::WithBaseline {
+                state,
+                baseline: baseline.clone(),
+            },
+        }
+    }
+
     pub fn baseline(&self) -> Option<&str> {
         match self {
             TestEntry::Simple(_) => None,
@@ -72,6 +82,16 @@ impl StatusFile {
 
     pub fn empty() -> Self {
         Self::new(BTreeMap::new())
+    }
+
+    pub fn set_test_state(&mut self, test_name: impl Into<String>, state: TestState) {
+        let test_name = test_name.into();
+        let entry = self
+            .tests
+            .get(&test_name)
+            .map(|existing| existing.with_state(state))
+            .unwrap_or(TestEntry::Simple(state));
+        self.tests.insert(test_name, entry);
     }
 
     pub fn read_from_path(path: &Path) -> Result<Self, StatusFileError> {
