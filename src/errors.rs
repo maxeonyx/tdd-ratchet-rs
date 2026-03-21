@@ -5,6 +5,15 @@ use crate::status::TestState;
 
 const SEPARATOR: &str = "───────────────────────────────────────────────────────────────";
 
+struct ReportSection {
+    title: String,
+    why: String,
+    problem: String,
+    fix: String,
+    details: Vec<String>,
+    extra: Option<String>,
+}
+
 /// Format the complete report for a ratchet evaluation.
 ///
 /// Takes the full eval result and produces all output. This is the single
@@ -59,106 +68,26 @@ pub fn format_report(result: &EvalResult) -> String {
 
     let mut out = String::new();
 
-    // TDD violations section (NewTestPassed + SkippedPending)
     if !tdd_violations.is_empty() {
-        let mut new_test_passed: Vec<&str> = Vec::new();
-        let mut skipped_pending: Vec<(&str, &str)> = Vec::new();
-
-        for v in &tdd_violations {
-            match v {
-                Violation::NewTestPassed { test } => {
-                    new_test_passed.push(test);
-                }
-                Violation::SkippedPending { test, commit } => {
-                    skipped_pending.push((test, commit));
-                }
-                _ => unreachable!(),
-            }
-        }
-
-        out.push_str(SEPARATOR);
-        out.push('\n');
-        out.push_str(
-            "tdd-ratchet: this project uses tdd-ratchet to enforce strict TDD.\n\
-             \n\
-             \x20\x20New tests must be committed in a failing state first. The implementation\n\
-             \x20\x20that makes them pass must be in a separate commit. Tests that fail on\n\
-             \x20\x20creation are expected — tdd-ratchet considers that a successful run.\n",
-        );
-
-        if !new_test_passed.is_empty() {
-            out.push('\n');
-            out.push_str("  New test passed without failing first:\n");
-            for test in &new_test_passed {
-                out.push_str(&format!("    ✗ {test}\n"));
-            }
-        }
-
-        if !skipped_pending.is_empty() {
-            out.push('\n');
-            out.push_str("  Test skipped the pending state in git history:\n");
-            for (test, commit) in &skipped_pending {
-                let short = &commit[..8.min(commit.len())];
-                out.push_str(&format!("    ✗ {test} (commit {short})\n"));
-            }
-        }
-
-        out.push_str(SEPARATOR);
-        out.push('\n');
+        out.push_str(&render_section(format_tdd_violations(&tdd_violations)));
     }
 
-    // Disappeared tests section
     if !disappeared.is_empty() {
-        let count = disappeared.len();
-        let plural = if count == 1 { "was" } else { "were" };
-        out.push_str(SEPARATOR);
-        out.push('\n');
-        out.push_str(&format!(
-            "tdd-ratchet: {count} test in .test-status.json {plural} not found in the test run.\n\
-             \x20\x20If you removed it intentionally, also remove it from .test-status.json.\n"
-        ));
-        for v in &disappeared {
-            if let Violation::TestDisappeared { test } = v {
-                out.push_str(&format!("    ✗ {test}\n"));
-            }
-        }
-        out.push_str(SEPARATOR);
-        out.push('\n');
+        out.push_str(&render_section(format_disappeared_tests(&disappeared)));
     }
 
     if !rename_violations.is_empty() {
-        out.push_str(&format_rename_violations(&rename_violations));
+        out.push_str(&render_section(format_rename_violations(
+            &rename_violations,
+        )));
     }
 
-    // Missing gatekeeper section
     if missing_gatekeeper {
-        out.push_str(SEPARATOR);
-        out.push('\n');
-        out.push_str(&format!(
-            "tdd-ratchet: no gatekeeper test found.\n\
-             \n\
-             \x20\x20tdd-ratchet requires a test named `{GATEKEEPER_TEST_NAME}` that fails\n\
-             \x20\x20when TDD_RATCHET is not set. This prevents running tests outside the\n\
-             \x20\x20ratchet. Add this to your tests:\n\
-             \n\
-             \x20\x20\x20\x20#[test]\n\
-             \x20\x20\x20\x20fn {GATEKEEPER_TEST_NAME}() {{\n\
-             \x20\x20\x20\x20\x20\x20\x20\x20if std::env::var(\"TDD_RATCHET\").is_err() {{\n\
-             \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20panic!(\"Run tdd-ratchet instead of cargo test.\");\n\
-             \x20\x20\x20\x20\x20\x20\x20\x20}}\n\
-             \x20\x20\x20\x20}}\n"
-        ));
-        out.push_str(SEPARATOR);
-        out.push('\n');
+        out.push_str(&render_section(format_missing_gatekeeper()));
     }
 
-    // Regressions — one-line mention, nextest already showed details
     if !regressions.is_empty() {
-        let count = regressions.len();
-        let plural = if count == 1 { "" } else { "s" };
-        out.push_str(&format!(
-            "tdd-ratchet: {count} test{plural} failing unexpectedly\n"
-        ));
+        out.push_str(&render_section(format_regressions(&regressions)));
     }
 
     if !result.warnings.is_empty() {
@@ -183,42 +112,164 @@ pub fn format_report(result: &EvalResult) -> String {
     out
 }
 
-fn format_rename_violations(rename_violations: &[&Violation]) -> String {
+fn render_section(section: ReportSection) -> String {
     let mut out = String::new();
     out.push_str(SEPARATOR);
     out.push('\n');
-    out.push_str("tdd-ratchet: invalid test rename declaration in .test-status.json.\n");
-    out.push_str("  Rename mappings must bridge one old committed test name to one new observed test name.\n");
-    for violation in rename_violations {
-        out.push_str(&format_rename_violation(violation));
+    out.push_str(&format!("tdd-ratchet: {}\n", section.title));
+    out.push('\n');
+    out.push_str(&format!("  Why: {}\n", section.why));
+    out.push_str(&format!("  Problem: {}\n", section.problem));
+    out.push_str(&format!("  What to do: {}\n", section.fix));
+
+    if !section.details.is_empty() {
+        out.push('\n');
+        for detail in section.details {
+            out.push_str(&detail);
+        }
     }
+
+    if let Some(extra) = section.extra {
+        out.push('\n');
+        out.push_str(&extra);
+        if !extra.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+
     out.push_str(SEPARATOR);
     out.push('\n');
     out
 }
 
-fn format_rename_violation(violation: &Violation) -> String {
-    match violation {
-        Violation::RenameOldNameMissing { new_name, old_name } => {
-            format!("    ✗ {new_name} -> {old_name}: old name is not present in committed status\n")
+fn format_tdd_violations(violations: &[&Violation]) -> ReportSection {
+    let mut details = Vec::new();
+
+    for violation in violations {
+        match violation {
+            Violation::NewTestPassed { test } => {
+                details.push(format!(
+                    "    ✗ New test passed without failing first: {test}\n"
+                ));
+            }
+            Violation::SkippedPending { test, commit } => {
+                let short = &commit[..8.min(commit.len())];
+                details.push(format!(
+                    "    ✗ Test skipped the pending state in git history: {test} (commit {short})\n"
+                ));
+            }
+            _ => unreachable!(),
         }
-        Violation::RenameNewNameMissing { new_name, old_name } => {
-            format!(
-                "    ✗ {new_name} -> {old_name}: new name was not found in the current test run\n"
-            )
-        }
-        Violation::RenameOldNameStillPresent { new_name, old_name } => {
-            format!(
-                "    ✗ {new_name} -> {old_name}: old name still appears in the current test run\n"
-            )
-        }
-        Violation::RenameNewNameAlreadyTracked { new_name, old_name } => {
-            format!("    ✗ {new_name} -> {old_name}: new name is already tracked independently\n")
-        }
-        Violation::RenameOldNameMappedMultipleTimes { old_name } => {
-            format!("    ✗ {old_name}: multiple rename entries point at the same old name\n")
-        }
-        _ => unreachable!(),
+    }
+
+    ReportSection {
+        title: "strict TDD violation".into(),
+        why: "this project uses tdd-ratchet to enforce test-first discipline: a test must exist in a failing state before a later commit makes it pass.".into(),
+        problem: "one or more tests reached a passing state without the required failing-first history.".into(),
+        fix: "split the work into separate commits: commit the failing test first, then commit the implementation that makes it pass. If the history is already mixed together, rebase to separate those commits.".into(),
+        details,
+        extra: None,
+    }
+}
+
+fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
+    let count = violations.len();
+    let test_word = if count == 1 { "test is" } else { "tests are" };
+    let details = violations
+        .iter()
+        .map(|violation| match violation {
+            Violation::TestDisappeared { test } => {
+                format!("    ✗ Tracked test missing from the run: {test}\n")
+            }
+            _ => unreachable!(),
+        })
+        .collect();
+
+    ReportSection {
+        title: "tracked test missing from run".into(),
+        why: "tdd-ratchet can only enforce the committed test contract when every tracked test still appears in the test run.".into(),
+        problem: format!("{count} tracked {test_word} listed in `.test-status.json` but did not appear in the current run."),
+        fix: "if you intentionally removed a test, remove it from both the code and `.test-status.json` in the same commit. If you renamed it, use the `renames` section to bridge the old name to the new one.".into(),
+        details,
+        extra: None,
+    }
+}
+
+fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
+    let details = rename_violations
+        .iter()
+        .map(|violation| match violation {
+            Violation::RenameOldNameMissing { new_name, old_name } => {
+                format!("    ✗ {new_name} -> {old_name}: old name is not present in committed status\n")
+            }
+            Violation::RenameNewNameMissing { new_name, old_name } => {
+                format!(
+                    "    ✗ {new_name} -> {old_name}: new name was not found in the current test run\n"
+                )
+            }
+            Violation::RenameOldNameStillPresent { new_name, old_name } => {
+                format!(
+                    "    ✗ {new_name} -> {old_name}: old name still appears in the current test run\n"
+                )
+            }
+            Violation::RenameNewNameAlreadyTracked { new_name, old_name } => {
+                format!("    ✗ {new_name} -> {old_name}: new name is already tracked independently\n")
+            }
+            Violation::RenameOldNameMappedMultipleTimes { old_name } => {
+                format!("    ✗ {old_name}: multiple rename entries point at the same old name\n")
+            }
+            _ => unreachable!(),
+        })
+        .collect();
+
+    ReportSection {
+        title: "invalid test rename declaration".into(),
+        why: "tdd-ratchet needs a valid identity bridge to distinguish a real rename from adding one test and removing another.".into(),
+        problem: "the `renames` section in `.test-status.json` does not map one committed old name to one observed new name.".into(),
+        fix: "correct the rename mapping so the old name exists in committed status, the new name appears in the current run, and only one new name points to each old name.".into(),
+        details,
+        extra: None,
+    }
+}
+
+fn format_missing_gatekeeper() -> ReportSection {
+    ReportSection {
+        title: "missing gatekeeper test".into(),
+        why: "tdd-ratchet only works when tests are run through the ratchet; the gatekeeper blocks direct `cargo test` runs that would bypass the policy.".into(),
+        problem: format!("no test named `{GATEKEEPER_TEST_NAME}` was found in the current run."),
+        fix: "add the gatekeeper test below so direct `cargo test` runs fail with instructions and ratchet runs can set `TDD_RATCHET=1`.".into(),
+        details: Vec::new(),
+        extra: Some(format!(
+            "    #[test]\n\
+             \x20\x20\x20\x20fn {GATEKEEPER_TEST_NAME}() {{\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20if std::env::var(\"TDD_RATCHET\").is_err() {{\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20panic!(\"Run tdd-ratchet instead of cargo test.\");\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20}}\n\
+             \x20\x20\x20\x20}}\n"
+        )),
+    }
+}
+
+fn format_regressions(violations: &[&Violation]) -> ReportSection {
+    let count = violations.len();
+    let test_word = if count == 1 { "test is" } else { "tests are" };
+    let details = violations
+        .iter()
+        .map(|violation| match violation {
+            Violation::Regression { test } => {
+                format!("    ✗ Previously passing test now fails: {test}\n")
+            }
+            _ => unreachable!(),
+        })
+        .collect();
+
+    ReportSection {
+        title: "regression detected".into(),
+        why: "once a test is tracked as passing, tdd-ratchet treats later failures as regressions so the suite stays trustworthy.".into(),
+        problem: format!("{count} tracked passing {test_word} now failing in the current run."),
+        fix: "fix the failing test or implementation. If the test is obsolete, remove it from both the code and `.test-status.json` in the same commit.".into(),
+        details,
+        extra: None,
     }
 }
 
