@@ -127,42 +127,7 @@ pub fn format_report(result: &EvalResult) -> String {
     }
 
     if !rename_violations.is_empty() {
-        out.push_str(SEPARATOR);
-        out.push('\n');
-        out.push_str("tdd-ratchet: invalid test rename declaration in .test-status.json.\n");
-        out.push_str("  Rename mappings must bridge one old committed test name to one new observed test name.\n");
-        for violation in &rename_violations {
-            match violation {
-                Violation::RenameOldNameMissing { new_name, old_name } => {
-                    out.push_str(&format!(
-                        "    ✗ {new_name} -> {old_name}: old name is not present in committed status\n"
-                    ));
-                }
-                Violation::RenameNewNameMissing { new_name, old_name } => {
-                    out.push_str(&format!(
-                        "    ✗ {new_name} -> {old_name}: new name was not found in the current test run\n"
-                    ));
-                }
-                Violation::RenameOldNameStillPresent { new_name, old_name } => {
-                    out.push_str(&format!(
-                        "    ✗ {new_name} -> {old_name}: old name still appears in the current test run\n"
-                    ));
-                }
-                Violation::RenameNewNameAlreadyTracked { new_name, old_name } => {
-                    out.push_str(&format!(
-                        "    ✗ {new_name} -> {old_name}: new name is already tracked independently\n"
-                    ));
-                }
-                Violation::RenameOldNameMappedMultipleTimes { old_name } => {
-                    out.push_str(&format!(
-                        "    ✗ {old_name}: multiple rename entries point at the same old name\n"
-                    ));
-                }
-                _ => unreachable!(),
-            }
-        }
-        out.push_str(SEPARATOR);
-        out.push('\n');
+        out.push_str(&format_rename_violations(&rename_violations));
     }
 
     // Missing gatekeeper section
@@ -197,25 +162,7 @@ pub fn format_report(result: &EvalResult) -> String {
     }
 
     if !result.warnings.is_empty() {
-        out.push_str(SEPARATOR);
-        out.push('\n');
-        out.push_str("tdd-ratchet: rename warnings:\n");
-        for warning in &result.warnings {
-            match warning {
-                Warning::RenameApplied { new_name, old_name } => {
-                    out.push_str(&format!(
-                        "    ! {new_name} renamed from {old_name}; the renames entry can now be removed\n"
-                    ));
-                }
-                Warning::StaleRename { new_name, old_name } => {
-                    out.push_str(&format!(
-                        "    ! {new_name} -> {old_name} is stale; the renames entry can be removed\n"
-                    ));
-                }
-            }
-        }
-        out.push_str(SEPARATOR);
-        out.push('\n');
+        out.push_str(&format_warnings(&result.warnings));
     }
 
     // Success line — only when no violations at all
@@ -234,6 +181,71 @@ pub fn format_report(result: &EvalResult) -> String {
     }
 
     out
+}
+
+fn format_rename_violations(rename_violations: &[&Violation]) -> String {
+    let mut out = String::new();
+    out.push_str(SEPARATOR);
+    out.push('\n');
+    out.push_str("tdd-ratchet: invalid test rename declaration in .test-status.json.\n");
+    out.push_str("  Rename mappings must bridge one old committed test name to one new observed test name.\n");
+    for violation in rename_violations {
+        out.push_str(&format_rename_violation(violation));
+    }
+    out.push_str(SEPARATOR);
+    out.push('\n');
+    out
+}
+
+fn format_rename_violation(violation: &Violation) -> String {
+    match violation {
+        Violation::RenameOldNameMissing { new_name, old_name } => {
+            format!("    ✗ {new_name} -> {old_name}: old name is not present in committed status\n")
+        }
+        Violation::RenameNewNameMissing { new_name, old_name } => {
+            format!(
+                "    ✗ {new_name} -> {old_name}: new name was not found in the current test run\n"
+            )
+        }
+        Violation::RenameOldNameStillPresent { new_name, old_name } => {
+            format!(
+                "    ✗ {new_name} -> {old_name}: old name still appears in the current test run\n"
+            )
+        }
+        Violation::RenameNewNameAlreadyTracked { new_name, old_name } => {
+            format!("    ✗ {new_name} -> {old_name}: new name is already tracked independently\n")
+        }
+        Violation::RenameOldNameMappedMultipleTimes { old_name } => {
+            format!("    ✗ {old_name}: multiple rename entries point at the same old name\n")
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn format_warnings(warnings: &[Warning]) -> String {
+    let mut out = String::new();
+    out.push_str(SEPARATOR);
+    out.push('\n');
+    out.push_str("tdd-ratchet: rename warnings:\n");
+    for warning in warnings {
+        out.push_str(&format_warning(warning));
+    }
+    out.push_str(SEPARATOR);
+    out.push('\n');
+    out
+}
+
+fn format_warning(warning: &Warning) -> String {
+    match warning {
+        Warning::RenameApplied { new_name, old_name } => {
+            format!(
+                "    ! {new_name} renamed from {old_name}; the renames entry can now be removed\n"
+            )
+        }
+        Warning::StaleRename { new_name, old_name } => {
+            format!("    ! {new_name} -> {old_name} is stale; the renames entry can be removed\n")
+        }
+    }
 }
 
 // --- Legacy API kept for existing unit tests ---

@@ -16,11 +16,6 @@ enum TransitionViolation {
     NewTestPassed { test: String },
     Regression { test: String },
     TestDisappeared { test: String },
-    RenameOldNameMissing { new_name: String, old_name: String },
-    RenameNewNameMissing { new_name: String, old_name: String },
-    RenameOldNameStillPresent { new_name: String, old_name: String },
-    RenameNewNameAlreadyTracked { new_name: String, old_name: String },
-    RenameOldNameMappedMultipleTimes { old_name: String },
 }
 
 /// The gatekeeper test name. This test is special-cased: it's allowed to
@@ -68,6 +63,14 @@ pub enum Warning {
     StaleRename { new_name: String, old_name: String },
 }
 
+#[derive(Debug, Clone)]
+struct IdentityResolution {
+    status: StatusFile,
+    results: Vec<TestResult>,
+    violations: Vec<Violation>,
+    warnings: Vec<Warning>,
+}
+
 /// Evaluate all ratchet rules. Pure function — no IO.
 ///
 /// Takes the current status file, test results, and git history snapshots.
@@ -89,16 +92,16 @@ pub fn evaluate(
         violations.push(Violation::MissingGatekeeper);
     }
 
-    let rename_outcome = apply_renames(status, results);
-    warnings.extend(rename_outcome.warnings);
+    let identity = resolve_identities(status, results);
+    violations.extend(identity.violations);
+    warnings.extend(identity.warnings);
 
     // 2. Apply ratchet rules (state transitions)
-    let transition_outcome = apply_transitions(&rename_outcome.status, &rename_outcome.results);
+    let transition_outcome = apply_transitions(&identity.status, &identity.results);
     violations.extend(
-        rename_outcome
+        transition_outcome
             .violations
             .into_iter()
-            .chain(transition_outcome.violations)
             .map(map_transition_violation),
     );
 
@@ -142,8 +145,8 @@ pub enum RatchetViolation {
 /// This is the original per-rule check without history or gatekeeper.
 /// Used by unit tests in state_transitions.rs.
 pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutcome {
-    let rename_outcome = apply_renames(status, results);
-    let transition_outcome = apply_transitions(&rename_outcome.status, &rename_outcome.results);
+    let identity = resolve_identities(status, results);
+    let transition_outcome = apply_transitions(&identity.status, &identity.results);
 
     let violations = transition_outcome
         .violations
@@ -156,11 +159,6 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
             TransitionViolation::TestDisappeared { test } => {
                 Some(RatchetViolation::TestDisappeared { test })
             }
-            TransitionViolation::RenameOldNameMissing { .. }
-            | TransitionViolation::RenameNewNameMissing { .. }
-            | TransitionViolation::RenameOldNameStillPresent { .. }
-            | TransitionViolation::RenameNewNameAlreadyTracked { .. }
-            | TransitionViolation::RenameOldNameMappedMultipleTimes { .. } => None,
         })
         .collect();
 
@@ -170,15 +168,7 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
     }
 }
 
-#[derive(Debug, Clone)]
-struct RenameOutcome {
-    status: StatusFile,
-    results: Vec<TestResult>,
-    violations: Vec<TransitionViolation>,
-    warnings: Vec<Warning>,
-}
-
-fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
+fn resolve_identities(status: &StatusFile, results: &[TestResult]) -> IdentityResolution {
     let mut updated_status = status.clone();
     let mut result_name_map: BTreeMap<String, String> = BTreeMap::new();
     let result_names = observed_test_names(results);
@@ -195,7 +185,7 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
 
     for (old_name, new_names) in old_name_sources {
         if new_names.len() > 1 {
-            violations.push(TransitionViolation::RenameOldNameMappedMultipleTimes { old_name });
+            violations.push(Violation::RenameOldNameMappedMultipleTimes { old_name });
         }
     }
 
@@ -212,7 +202,7 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
                     old_name: old_name.clone(),
                 });
             } else {
-                violations.push(TransitionViolation::RenameOldNameMissing {
+                violations.push(Violation::RenameOldNameMissing {
                     new_name: new_name.clone(),
                     old_name: old_name.clone(),
                 });
@@ -221,7 +211,7 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
         }
 
         if new_in_status {
-            violations.push(TransitionViolation::RenameNewNameAlreadyTracked {
+            violations.push(Violation::RenameNewNameAlreadyTracked {
                 new_name: new_name.clone(),
                 old_name: old_name.clone(),
             });
@@ -229,7 +219,7 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
         }
 
         if !new_in_results {
-            violations.push(TransitionViolation::RenameNewNameMissing {
+            violations.push(Violation::RenameNewNameMissing {
                 new_name: new_name.clone(),
                 old_name: old_name.clone(),
             });
@@ -237,7 +227,7 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
         }
 
         if old_in_results {
-            violations.push(TransitionViolation::RenameOldNameStillPresent {
+            violations.push(Violation::RenameOldNameStillPresent {
                 new_name: new_name.clone(),
                 old_name: old_name.clone(),
             });
@@ -267,7 +257,7 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
         })
         .collect();
 
-    RenameOutcome {
+    IdentityResolution {
         status: updated_status,
         results: rewritten_results,
         violations,
@@ -275,26 +265,29 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
     }
 }
 
+fn observed_test_names(results: &[TestResult]) -> BTreeSet<&str> {
+    results.iter().map(|result| result.name.as_str()).collect()
+}
+
+fn tracked_test_state(status: &StatusFile, test_name: &str) -> Option<TestState> {
+    status.tests.get(test_name).map(|entry| entry.state())
+}
+
+fn missing_tracked_tests<'a>(
+    status: &'a StatusFile,
+    seen_names: &BTreeSet<&str>,
+) -> impl Iterator<Item = &'a String> {
+    status
+        .tests
+        .keys()
+        .filter(move |name| !seen_names.contains(name.as_str()))
+}
+
 fn map_transition_violation(violation: TransitionViolation) -> Violation {
     match violation {
         TransitionViolation::NewTestPassed { test } => Violation::NewTestPassed { test },
         TransitionViolation::Regression { test } => Violation::Regression { test },
         TransitionViolation::TestDisappeared { test } => Violation::TestDisappeared { test },
-        TransitionViolation::RenameOldNameMissing { new_name, old_name } => {
-            Violation::RenameOldNameMissing { new_name, old_name }
-        }
-        TransitionViolation::RenameNewNameMissing { new_name, old_name } => {
-            Violation::RenameNewNameMissing { new_name, old_name }
-        }
-        TransitionViolation::RenameOldNameStillPresent { new_name, old_name } => {
-            Violation::RenameOldNameStillPresent { new_name, old_name }
-        }
-        TransitionViolation::RenameNewNameAlreadyTracked { new_name, old_name } => {
-            Violation::RenameNewNameAlreadyTracked { new_name, old_name }
-        }
-        TransitionViolation::RenameOldNameMappedMultipleTimes { old_name } => {
-            Violation::RenameOldNameMappedMultipleTimes { old_name }
-        }
     }
 }
 
@@ -343,22 +336,4 @@ fn apply_transitions(status: &StatusFile, results: &[TestResult]) -> TransitionO
         violations,
         updated,
     }
-}
-
-fn observed_test_names(results: &[TestResult]) -> BTreeSet<&str> {
-    results.iter().map(|result| result.name.as_str()).collect()
-}
-
-fn tracked_test_state(status: &StatusFile, test_name: &str) -> Option<TestState> {
-    status.tests.get(test_name).map(|entry| entry.state())
-}
-
-fn missing_tracked_tests<'a>(
-    status: &'a StatusFile,
-    seen_names: &BTreeSet<&str>,
-) -> impl Iterator<Item = &'a String> {
-    status
-        .tests
-        .keys()
-        .filter(move |name| !seen_names.contains(name.as_str()))
 }
