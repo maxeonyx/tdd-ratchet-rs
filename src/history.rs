@@ -63,6 +63,7 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
 /// grandfathered, just like tests in the first committed status snapshot.
 pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
     let mut first_seen = BTreeMap::new();
+    let mut identity_aliases = BTreeMap::new();
     let mut violations = Vec::new();
 
     let first_snapshot_commit = snapshots.first().map(|s| s.commit.clone());
@@ -87,8 +88,12 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
         .collect();
 
     for snapshot in snapshots {
+        record_history_renames(&mut identity_aliases, &snapshot.status);
+
         for (test_name, entry) in &snapshot.status.tests {
-            if !mark_first_appearance(&mut first_seen, test_name) {
+            let identity_name = resolve_history_identity(&identity_aliases, test_name);
+
+            if !mark_first_appearance(&mut first_seen, identity_name) {
                 continue;
             }
 
@@ -99,7 +104,7 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
             }
 
             if !is_grandfathered(
-                test_name,
+                identity_name,
                 &snapshot.commit,
                 first_snapshot_commit.as_deref(),
                 &per_test_baselines,
@@ -114,6 +119,24 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
     }
 
     violations
+}
+
+fn record_history_renames(identity_aliases: &mut BTreeMap<String, String>, status: &StatusFile) {
+    for (new_name, old_name) in &status.renames {
+        let canonical_old_name = resolve_history_identity(identity_aliases, old_name).to_string();
+        identity_aliases.insert(new_name.clone(), canonical_old_name);
+    }
+}
+
+fn resolve_history_identity<'a>(
+    identity_aliases: &'a BTreeMap<String, String>,
+    test_name: &'a str,
+) -> &'a str {
+    let mut current = test_name;
+    while let Some(next) = identity_aliases.get(current) {
+        current = next;
+    }
+    current
 }
 
 fn mark_first_appearance(first_seen: &mut BTreeMap<String, ()>, test_name: &str) -> bool {

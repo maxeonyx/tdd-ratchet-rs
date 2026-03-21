@@ -224,7 +224,8 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
     "old_test": {
       "state": "passing",
       "baseline": "abc123"
-    }
+    },
+    "tdd_ratchet_gatekeeper": "passing"
   },
   "renames": {
     "new_test": "old_test"
@@ -232,7 +233,10 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
 }"#,
     )
     .expect("rename support should parse");
-    let tr = results(&[("new_test", TestOutcome::Passed)]);
+    let tr = results(&[
+        ("new_test", TestOutcome::Passed),
+        ("tdd_ratchet_gatekeeper", TestOutcome::Passed),
+    ]);
 
     let outcome = evaluate(&sf, &tr, &[]);
 
@@ -249,5 +253,37 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
             state: TestState::Passing,
             baseline: "abc123".to_string(),
         }
+    );
+}
+
+#[test]
+fn invalid_rename_is_reported() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "old_test": "pending",
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "renames": {
+    "new_test": "old_test"
+  }
+}"#,
+    )
+    .expect("rename support should parse");
+    let tr = results(&[
+        ("old_test", TestOutcome::Failed),
+        ("new_test", TestOutcome::Failed),
+        ("tdd_ratchet_gatekeeper", TestOutcome::Passed),
+    ]);
+
+    let outcome = evaluate(&sf, &tr, &[]);
+
+    assert!(
+        outcome.violations.iter().any(|v| matches!(
+            v,
+            tdd_ratchet::ratchet::Violation::RenameOldNameStillPresent { .. }
+        )),
+        "Invalid rename should be reported: {:?}",
+        outcome.violations
     );
 }

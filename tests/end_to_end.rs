@@ -308,13 +308,16 @@ fn new_name() {
     assert!(ok, "Rename commit should succeed: {out}");
 
     let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    let status_json: serde_json::Value = serde_json::from_str(&status).unwrap();
     assert!(
         status.contains("test-project::rename_me$new_name"),
         "Renamed test should be tracked under the new name: {status}"
     );
     assert!(
-        !status.contains("test-project::rename_me$old_name"),
-        "Old test name should be removed after rename: {status}"
+        status_json["tests"]
+            .as_object()
+            .is_some_and(|tests| !tests.contains_key("test-project::rename_me$old_name")),
+        "Old test name should be removed from tracked tests after rename: {status}"
     );
     assert!(
         status.contains("\"renames\""),

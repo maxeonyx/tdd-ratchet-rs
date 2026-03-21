@@ -3,7 +3,7 @@
 use crate::history::{check_history_snapshots, HistorySnapshot, HistoryViolation};
 use crate::runner::{TestOutcome, TestResult};
 use crate::status::{StatusFile, TestState};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone)]
 struct TransitionOutcome {
@@ -16,6 +16,11 @@ enum TransitionViolation {
     NewTestPassed { test: String },
     Regression { test: String },
     TestDisappeared { test: String },
+    RenameOldNameMissing { new_name: String, old_name: String },
+    RenameNewNameMissing { new_name: String, old_name: String },
+    RenameOldNameStillPresent { new_name: String, old_name: String },
+    RenameNewNameAlreadyTracked { new_name: String, old_name: String },
+    RenameOldNameMappedMultipleTimes { old_name: String },
 }
 
 /// The gatekeeper test name. This test is special-cased: it's allowed to
@@ -28,6 +33,7 @@ pub const GATEKEEPER_TEST_NAME: &str = "tdd_ratchet_gatekeeper";
 #[derive(Debug, Clone)]
 pub struct EvalResult {
     pub violations: Vec<Violation>,
+    pub warnings: Vec<Warning>,
     pub updated: StatusFile,
 }
 
@@ -44,6 +50,22 @@ pub enum Violation {
     SkippedPending { test: String, commit: String },
     /// No gatekeeper test found in the test run
     MissingGatekeeper,
+    /// Rename declared for an old test name not present in committed status
+    RenameOldNameMissing { new_name: String, old_name: String },
+    /// Rename declared for a new test name not present in current results
+    RenameNewNameMissing { new_name: String, old_name: String },
+    /// Rename declared but old test name still appears in current results
+    RenameOldNameStillPresent { new_name: String, old_name: String },
+    /// Rename declared to a name already tracked independently
+    RenameNewNameAlreadyTracked { new_name: String, old_name: String },
+    /// Multiple rename declarations target the same old name
+    RenameOldNameMappedMultipleTimes { old_name: String },
+}
+
+#[derive(Debug, Clone)]
+pub enum Warning {
+    RenameApplied { new_name: String, old_name: String },
+    StaleRename { new_name: String, old_name: String },
 }
 
 /// Evaluate all ratchet rules. Pure function — no IO.
@@ -57,6 +79,7 @@ pub fn evaluate(
     history_snapshots: &[HistorySnapshot],
 ) -> EvalResult {
     let mut violations = Vec::new();
+    let mut warnings = Vec::new();
 
     // 1. Check gatekeeper presence
     let has_gatekeeper = results
@@ -66,19 +89,17 @@ pub fn evaluate(
         violations.push(Violation::MissingGatekeeper);
     }
 
+    let rename_outcome = apply_renames(status, results);
+    warnings.extend(rename_outcome.warnings);
+
     // 2. Apply ratchet rules (state transitions)
-    let transition_outcome = apply_transitions(status, results);
+    let transition_outcome = apply_transitions(&rename_outcome.status, &rename_outcome.results);
     violations.extend(
-        transition_outcome
+        rename_outcome
             .violations
             .into_iter()
-            .map(|violation| match violation {
-                TransitionViolation::NewTestPassed { test } => Violation::NewTestPassed { test },
-                TransitionViolation::Regression { test } => Violation::Regression { test },
-                TransitionViolation::TestDisappeared { test } => {
-                    Violation::TestDisappeared { test }
-                }
-            }),
+            .chain(transition_outcome.violations)
+            .map(map_transition_violation),
     );
 
     // 3. Check git history
@@ -93,6 +114,7 @@ pub fn evaluate(
 
     EvalResult {
         violations,
+        warnings,
         updated: transition_outcome.updated,
     }
 }
@@ -120,23 +142,159 @@ pub enum RatchetViolation {
 /// This is the original per-rule check without history or gatekeeper.
 /// Used by unit tests in state_transitions.rs.
 pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutcome {
-    let transition_outcome = apply_transitions(status, results);
+    let rename_outcome = apply_renames(status, results);
+    let transition_outcome = apply_transitions(&rename_outcome.status, &rename_outcome.results);
 
     let violations = transition_outcome
         .violations
         .into_iter()
-        .map(|violation| match violation {
-            TransitionViolation::NewTestPassed { test } => RatchetViolation::NewTestPassed { test },
-            TransitionViolation::Regression { test } => RatchetViolation::Regression { test },
-            TransitionViolation::TestDisappeared { test } => {
-                RatchetViolation::TestDisappeared { test }
+        .filter_map(|violation| match violation {
+            TransitionViolation::NewTestPassed { test } => {
+                Some(RatchetViolation::NewTestPassed { test })
             }
+            TransitionViolation::Regression { test } => Some(RatchetViolation::Regression { test }),
+            TransitionViolation::TestDisappeared { test } => {
+                Some(RatchetViolation::TestDisappeared { test })
+            }
+            TransitionViolation::RenameOldNameMissing { .. }
+            | TransitionViolation::RenameNewNameMissing { .. }
+            | TransitionViolation::RenameOldNameStillPresent { .. }
+            | TransitionViolation::RenameNewNameAlreadyTracked { .. }
+            | TransitionViolation::RenameOldNameMappedMultipleTimes { .. } => None,
         })
         .collect();
 
     RatchetOutcome {
         violations,
         updated: transition_outcome.updated,
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RenameOutcome {
+    status: StatusFile,
+    results: Vec<TestResult>,
+    violations: Vec<TransitionViolation>,
+    warnings: Vec<Warning>,
+}
+
+fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
+    let mut updated_status = status.clone();
+    let mut result_name_map: BTreeMap<String, String> = BTreeMap::new();
+    let result_names = observed_test_names(results);
+    let mut violations = Vec::new();
+    let mut warnings = Vec::new();
+    let mut old_name_sources = BTreeMap::<String, Vec<String>>::new();
+
+    for (new_name, old_name) in &status.renames {
+        old_name_sources
+            .entry(old_name.clone())
+            .or_default()
+            .push(new_name.clone());
+    }
+
+    for (old_name, new_names) in old_name_sources {
+        if new_names.len() > 1 {
+            violations.push(TransitionViolation::RenameOldNameMappedMultipleTimes { old_name });
+        }
+    }
+
+    for (new_name, old_name) in &status.renames {
+        let old_in_status = updated_status.tests.contains_key(old_name);
+        let new_in_status = updated_status.tests.contains_key(new_name);
+        let old_in_results = result_names.contains(old_name.as_str());
+        let new_in_results = result_names.contains(new_name.as_str());
+
+        if !old_in_status {
+            if new_in_status && !old_in_results {
+                warnings.push(Warning::StaleRename {
+                    new_name: new_name.clone(),
+                    old_name: old_name.clone(),
+                });
+            } else {
+                violations.push(TransitionViolation::RenameOldNameMissing {
+                    new_name: new_name.clone(),
+                    old_name: old_name.clone(),
+                });
+            }
+            continue;
+        }
+
+        if new_in_status {
+            violations.push(TransitionViolation::RenameNewNameAlreadyTracked {
+                new_name: new_name.clone(),
+                old_name: old_name.clone(),
+            });
+            continue;
+        }
+
+        if !new_in_results {
+            violations.push(TransitionViolation::RenameNewNameMissing {
+                new_name: new_name.clone(),
+                old_name: old_name.clone(),
+            });
+            continue;
+        }
+
+        if old_in_results {
+            violations.push(TransitionViolation::RenameOldNameStillPresent {
+                new_name: new_name.clone(),
+                old_name: old_name.clone(),
+            });
+            continue;
+        }
+
+        let entry = updated_status
+            .tests
+            .remove(old_name)
+            .expect("validated old name should exist in status");
+        updated_status.tests.insert(new_name.clone(), entry);
+        result_name_map.insert(old_name.clone(), new_name.clone());
+        warnings.push(Warning::RenameApplied {
+            new_name: new_name.clone(),
+            old_name: old_name.clone(),
+        });
+    }
+
+    let rewritten_results = results
+        .iter()
+        .map(|result| TestResult {
+            name: result_name_map
+                .get(&result.name)
+                .cloned()
+                .unwrap_or_else(|| result.name.clone()),
+            outcome: result.outcome,
+        })
+        .collect();
+
+    RenameOutcome {
+        status: updated_status,
+        results: rewritten_results,
+        violations,
+        warnings,
+    }
+}
+
+fn map_transition_violation(violation: TransitionViolation) -> Violation {
+    match violation {
+        TransitionViolation::NewTestPassed { test } => Violation::NewTestPassed { test },
+        TransitionViolation::Regression { test } => Violation::Regression { test },
+        TransitionViolation::TestDisappeared { test } => Violation::TestDisappeared { test },
+        TransitionViolation::RenameOldNameMissing { new_name, old_name } => {
+            Violation::RenameOldNameMissing { new_name, old_name }
+        }
+        TransitionViolation::RenameNewNameMissing { new_name, old_name } => {
+            Violation::RenameNewNameMissing { new_name, old_name }
+        }
+        TransitionViolation::RenameOldNameStillPresent { new_name, old_name } => {
+            Violation::RenameOldNameStillPresent { new_name, old_name }
+        }
+        TransitionViolation::RenameNewNameAlreadyTracked { new_name, old_name } => {
+            Violation::RenameNewNameAlreadyTracked { new_name, old_name }
+        }
+        TransitionViolation::RenameOldNameMappedMultipleTimes { old_name } => {
+            Violation::RenameOldNameMappedMultipleTimes { old_name }
+        }
     }
 }
 

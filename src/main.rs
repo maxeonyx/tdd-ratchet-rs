@@ -94,7 +94,8 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
 }
 
 fn gather_run(project_dir: &Path) -> GatheredRun {
-    let status = load_status_input(project_dir);
+    let mut status = load_status_input(project_dir);
+    status.renames = load_working_tree_renames(project_dir);
     let results = run_nextest(project_dir, true);
     let history_snapshots = collect_history_snapshots(project_dir).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to inspect git history: {e}");
@@ -115,6 +116,20 @@ fn load_status_input(project_dir: &Path) -> StatusFile {
             process::exit(1);
         })
         .unwrap_or_else(StatusFile::empty)
+}
+
+fn load_working_tree_renames(project_dir: &Path) -> std::collections::BTreeMap<String, String> {
+    let status_path = project_dir.join(".test-status.json");
+    if !status_path.exists() {
+        return std::collections::BTreeMap::new();
+    }
+
+    StatusFile::load(&status_path)
+        .map(|status| status.renames)
+        .unwrap_or_else(|e| {
+            eprintln!("tdd-ratchet: failed to read working-tree renames: {e}");
+            process::exit(1);
+        })
 }
 
 fn status_entries_from_results(

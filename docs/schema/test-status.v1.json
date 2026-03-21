@@ -41,6 +41,13 @@
           }
         ]
       }
+    },
+    "renames": {
+      "type": "object",
+      "description": "Temporary rename bridge mapping new test names to their previous committed names.",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   }
 }
