@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use tdd_ratchet::history::{HistoryViolation, check_history};
+use tdd_ratchet::history::{check_history, HistoryViolation};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -222,6 +222,25 @@ fn committed_rename_bridges_history_identity() {
             |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "new_test")
         ),
         "Committed rename should bridge history for new_test: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn historical_snapshots_ignore_unknown_top_level_fields() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(
+        dir.path(),
+        r#"{"tests":{"legacy":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567","future_field":{"note":"keep going"}}"#,
+    );
+    commit(dir.path(), "Add legacy status snapshot");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        violations.is_empty(),
+        "Historical unknown fields should be ignored: {violations:?}"
     );
     dir.pass();
 }

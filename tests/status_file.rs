@@ -93,6 +93,19 @@ fn legacy_global_baseline_field_is_rejected() {
 }
 
 #[test]
+fn historical_parser_ignores_unknown_top_level_fields() {
+    let dir = TestDir::new();
+    let path = dir.path().join(".test-status.json");
+    let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567","future_field":{"enabled":true}}"#;
+
+    let status = StatusFile::parse_historical_from_str(json, &path).unwrap();
+
+    assert_eq!(status.tests["a"].state(), TestState::Passing);
+    assert!(status.renames.is_empty());
+    dir.pass();
+}
+
+#[test]
 fn schema_field_is_accepted() {
     let json = r#"{"$schema":"https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json","tests":{"a":"passing"}}"#;
     let status: StatusFile = serde_json::from_str(json).unwrap();
