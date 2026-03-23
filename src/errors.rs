@@ -1,6 +1,6 @@
 // Report formatting: produces the complete tdd-ratchet output after a run.
 
-use crate::ratchet::{EvalResult, Violation, Warning, GATEKEEPER_TEST_NAME};
+use crate::ratchet::{EvalResult, GATEKEEPER_TEST_NAME, Violation, Warning};
 use crate::status::TestState;
 
 const SEPARATOR: &str = "───────────────────────────────────────────────────────────────";
@@ -314,15 +314,11 @@ fn format_warnings(warnings: &[Warning]) -> String {
 
 fn format_warning(warning: &Warning) -> String {
     match warning {
-        Warning::RenameApplied { new_name, old_name } => {
-            warning_line(format!(
-                "{new_name} renamed from {old_name}; the temporary `renames` entry has done its job and can now be removed"
-            ))
-        }
-        Warning::StaleRename { new_name, old_name } => {
-            warning_line(format!(
-                "{new_name} -> {old_name} is stale; the temporary `renames` entry can be removed"
-            ))
-        }
+        Warning::RenameApplied { new_name, old_name } => warning_line(format!(
+            "{new_name} renamed from {old_name}; the temporary `renames` entry has done its job and can now be removed"
+        )),
+        Warning::StaleRename { new_name, old_name } => warning_line(format!(
+            "{new_name} -> {old_name} is stale; the temporary `renames` entry can be removed"
+        )),
     }
 }
