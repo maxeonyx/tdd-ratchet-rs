@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use tdd_ratchet::history::{HistoryViolation, check_history};
+use tdd_ratchet::history::{check_history, HistoryViolation};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -241,6 +241,50 @@ fn historical_snapshots_ignore_unknown_top_level_fields() {
     assert!(
         violations.is_empty(),
         "Historical unknown fields should be ignored: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn removed_tests_stop_participating_in_history_checks() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(dir.path(), r#"{"tests":{"retired_test":"passing"}}"#);
+    commit(dir.path(), "Track retired test as passing");
+
+    write_status(dir.path(), r#"{"tests":{}}"#);
+    commit(dir.path(), "Remove retired test from status file");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        violations.is_empty(),
+        "Tests removed from the latest status file should stop affecting history checks: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn later_removed_tests_do_not_keep_old_history_violations_alive() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Initial tracked tests");
+
+    write_status(
+        dir.path(),
+        r#"{"tests":{"existing":"passing","temporary_cheater":"passing"}}"#,
+    );
+    commit(dir.path(), "Add temporary cheater");
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Remove temporary cheater");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        violations.is_empty(),
+        "Removed tests should not keep old skipped-pending violations alive: {violations:?}"
     );
     dir.pass();
 }
