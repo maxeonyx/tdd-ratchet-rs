@@ -27,6 +27,8 @@ chmod +x ~/.local/bin/cargo-ratchet
 
 ```
 cargo ratchet
+cargo ratchet --help
+cargo ratchet --version
 ```
 
 On the first run in a project, `cargo ratchet` treats the status as empty if no committed `.test-status.json` exists yet. It writes the updated `.test-status.json` to the working tree; commit that file along with your code changes so the next run reads it from `HEAD`.
