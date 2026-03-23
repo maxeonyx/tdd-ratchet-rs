@@ -25,7 +25,6 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::end_to_end$help_flag_prints_usage_without_running_ratchet": "passing",
     "tdd-ratchet::end_to_end$happy_path_tdd_workflow": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -34,7 +33,6 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::end_to_end$version_flag_prints_version_without_running_ratchet": "passing",
     "tdd-ratchet::end_to_end$rejects_bad_git_history_skipped_pending": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -303,6 +301,14 @@
     "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$help_flag_prints_usage_without_running_ratchet": {
+      "state": "passing",
+      "baseline": "958ac8134bed77e8c0bd49579387a4dd18426f7b"
+    },
+    "tdd-ratchet::end_to_end$version_flag_prints_version_without_running_ratchet": {
+      "state": "passing",
+      "baseline": "958ac8134bed77e8c0bd49579387a4dd18426f7b"
     }
   },
   "renames": {
