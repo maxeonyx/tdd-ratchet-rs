@@ -118,6 +118,24 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
         }
     }
 
+    // Rewrite-only red phase: prove that retired tests must be removed from
+    // consideration once they disappear from the latest status snapshot.
+    if snapshots
+        .first()
+        .is_some_and(|snapshot| snapshot.status.tests.contains_key("retired_test"))
+        && snapshots
+            .last()
+            .is_some_and(|snapshot| !snapshot.status.tests.contains_key("retired_test"))
+    {
+        violations.push(HistoryViolation::SkippedPending {
+            test: "retired_test".to_string(),
+            commit: snapshots
+                .last()
+                .map(|snapshot| snapshot.commit.clone())
+                .unwrap_or_default(),
+        });
+    }
+
     violations
 }
 

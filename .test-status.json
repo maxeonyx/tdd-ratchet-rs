@@ -32,6 +32,7 @@
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
     "tdd-ratchet::git_history$committed_rename_bridges_history_identity": "passing",
     "tdd-ratchet::git_history$historical_snapshots_ignore_unknown_top_level_fields": "passing",
+    "tdd-ratchet::git_history$removed_tests_stop_participating_in_history_checks": "pending",
     "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {
       "state": "passing",
       "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
