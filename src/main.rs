@@ -5,7 +5,7 @@ use std::process::{self, Command, Stdio};
 use tdd_ratchet::errors::format_report;
 use tdd_ratchet::history::{collect_history_snapshots, read_head_status};
 use tdd_ratchet::ratchet::evaluate;
-use tdd_ratchet::runner::{parse_nextest_output, TestOutcome, TestResult};
+use tdd_ratchet::runner::{TestOutcome, TestResult, parse_nextest_output};
 use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
 
 struct GatheredRun {

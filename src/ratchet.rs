@@ -1,6 +1,6 @@
 // Core ratchet logic: compare status file against test results, produce violations.
 
-use crate::history::{check_history_snapshots, HistorySnapshot, HistoryViolation};
+use crate::history::{HistorySnapshot, HistoryViolation, check_history_snapshots};
 use crate::runner::{TestOutcome, TestResult};
 use crate::status::{StatusFile, TestState};
 use std::collections::{BTreeMap, BTreeSet};

@@ -2,7 +2,7 @@
 //
 // Stories 5, 6, 7: The core ratchet rules.
 
-use tdd_ratchet::ratchet::{check_ratchet, evaluate, RatchetViolation};
+use tdd_ratchet::ratchet::{RatchetViolation, check_ratchet, evaluate};
 use tdd_ratchet::runner::{TestOutcome, TestResult};
 use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
 
