@@ -1,6 +1,6 @@
 [package]
 name = "tdd-ratchet"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2024"
 description = "Enforce strict TDD in Rust projects — new tests must fail before they can pass, verified by git history"
 license = "MIT OR Apache-2.0"
