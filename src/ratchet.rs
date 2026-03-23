@@ -1,6 +1,6 @@
 // Core ratchet logic: compare status file against test results, produce violations.
 
-use crate::history::{HistorySnapshot, HistoryViolation, check_history_snapshots};
+use crate::history::{check_history_snapshots, HistorySnapshot, HistoryViolation};
 use crate::runner::{TestOutcome, TestResult};
 use crate::status::{StatusFile, TestState};
 use std::collections::{BTreeMap, BTreeSet};
@@ -151,13 +151,11 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
     let violations = transition_outcome
         .violations
         .into_iter()
-        .filter_map(|violation| match violation {
-            TransitionViolation::NewTestPassed { test } => {
-                Some(RatchetViolation::NewTestPassed { test })
-            }
-            TransitionViolation::Regression { test } => Some(RatchetViolation::Regression { test }),
+        .map(|violation| match violation {
+            TransitionViolation::NewTestPassed { test } => RatchetViolation::NewTestPassed { test },
+            TransitionViolation::Regression { test } => RatchetViolation::Regression { test },
             TransitionViolation::TestDisappeared { test } => {
-                Some(RatchetViolation::TestDisappeared { test })
+                RatchetViolation::TestDisappeared { test }
             }
         })
         .collect();
