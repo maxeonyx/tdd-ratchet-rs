@@ -143,6 +143,21 @@ fn run_ratchet_init(dir: &Path) -> (bool, String) {
     (output.status.success(), out)
 }
 
+fn run_ratchet_args(dir: &Path, args: &[&str]) -> (bool, String) {
+    let output = Command::new(cargo_bin())
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("HOME", dir)
+        .env("RUSTUP_HOME", rustup_home())
+        .env("CARGO_HOME", cargo_home())
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
+    (output.status.success(), out)
+}
+
 /// Add the gatekeeper test to a test project.
 /// Fresh-start runs still require the gatekeeper before they can succeed.
 fn add_gatekeeper(dir: &Path) {
@@ -195,6 +210,42 @@ fn init_creates_empty_status_file() {
     assert!(
         dir.path().join(".test-status.json").exists(),
         "Status file should be created"
+    );
+    dir.pass();
+}
+
+#[test]
+fn version_flag_prints_version_without_running_ratchet() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_args(dir.path(), &["--version"]);
+    assert!(ok, "--version should succeed: {out}");
+    assert_eq!(
+        out.trim(),
+        format!("cargo-ratchet {}", env!("CARGO_PKG_VERSION"))
+    );
+    assert!(
+        !dir.path().join(".test-status.json").exists(),
+        "--version should not run the ratchet"
+    );
+    dir.pass();
+}
+
+#[test]
+fn help_flag_prints_usage_without_running_ratchet() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_args(dir.path(), &["--help"]);
+    assert!(ok, "--help should succeed: {out}");
+    assert!(out.contains("Usage: cargo-ratchet [--init] [--help] [--version]"));
+    assert!(out.contains("--version, -V"));
+    assert!(
+        !dir.path().join(".test-status.json").exists(),
+        "--help should not run the ratchet"
     );
     dir.pass();
 }
