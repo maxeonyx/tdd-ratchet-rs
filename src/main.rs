@@ -8,6 +8,8 @@ use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::{TestOutcome, TestResult, parse_nextest_output};
 use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
 
+const HELP_TEXT: &str = "Usage: cargo-ratchet [--init] [--help] [--version]\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help, -h      Print help\n  --version, -V   Print version\n";
+
 struct GatheredRun {
     status: StatusFile,
     results: Vec<tdd_ratchet::runner::TestResult>,
@@ -16,6 +18,17 @@ struct GatheredRun {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print!("{HELP_TEXT}");
+        return;
+    }
+
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("cargo-ratchet {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     let project_dir = env::current_dir().unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: cannot determine current directory: {e}");
         process::exit(1);
