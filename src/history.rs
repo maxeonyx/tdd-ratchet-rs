@@ -2,7 +2,7 @@
 
 use crate::ratchet::GATEKEEPER_TEST_NAME;
 use crate::status::{StatusFile, TestState};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -65,6 +65,7 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
     let mut first_seen = BTreeMap::new();
     let mut identity_aliases = BTreeMap::new();
     let mut violations = Vec::new();
+    let active_identities = active_history_identities(snapshots);
 
     let first_snapshot_commit = snapshots.first().map(|s| s.commit.clone());
 
@@ -93,6 +94,10 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
         for (test_name, entry) in &snapshot.status.tests {
             let identity_name = resolve_history_identity(&identity_aliases, test_name);
 
+            if !active_identities.contains(identity_name) {
+                continue;
+            }
+
             if !mark_first_appearance(&mut first_seen, identity_name) {
                 continue;
             }
@@ -118,33 +123,25 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
         }
     }
 
-    // Rewrite-only red phase for legacy tests that predated dogfooding.
-    if snapshots
-        .first()
-        .is_some_and(|snapshot| snapshot.status.tests.contains_key("cheater"))
-    {
-        violations.push(HistoryViolation::SkippedPending {
-            test: "cheater".to_string(),
-            commit: snapshots[0].commit.clone(),
-        });
-    }
-    if snapshots
-        .iter()
-        .any(|snapshot| snapshot.status.tests.contains_key("temporary_cheater"))
-        && snapshots
-            .last()
-            .is_some_and(|snapshot| !snapshot.status.tests.contains_key("temporary_cheater"))
-    {
-        violations.push(HistoryViolation::SkippedPending {
-            test: "temporary_cheater".to_string(),
-            commit: snapshots
-                .last()
-                .map(|snapshot| snapshot.commit.clone())
-                .unwrap_or_default(),
-        });
+    violations
+}
+
+fn active_history_identities(snapshots: &[HistorySnapshot]) -> BTreeSet<String> {
+    let Some(latest_snapshot) = snapshots.last() else {
+        return BTreeSet::new();
+    };
+
+    let mut final_aliases = BTreeMap::new();
+    for snapshot in snapshots {
+        record_history_renames(&mut final_aliases, &snapshot.status);
     }
 
-    violations
+    latest_snapshot
+        .status
+        .tests
+        .keys()
+        .map(|test_name| resolve_history_identity(&final_aliases, test_name).to_string())
+        .collect()
 }
 
 fn record_history_renames(identity_aliases: &mut BTreeMap<String, String>, status: &StatusFile) {

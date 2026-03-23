@@ -207,7 +207,7 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
         problem: format!(
             "{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."
         ),
-        fix: "Rewrite-only red phase: removal guidance is not yet available.".into(),
+        fix: "If you removed it intentionally, also remove it from `.test-status.json`. If you renamed it, add a `renames` entry so tdd-ratchet can bridge the old name to the new one.".into(),
         details,
         extra: None,
     }
