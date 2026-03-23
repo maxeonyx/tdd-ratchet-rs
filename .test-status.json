@@ -31,6 +31,7 @@
     "tdd-ratchet::report_messages$rename_warning_report_is_also_self_documenting": "passing",
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
     "tdd-ratchet::git_history$committed_rename_bridges_history_identity": "passing",
+    "tdd-ratchet::git_history$historical_snapshots_ignore_unknown_top_level_fields": "pending",
     "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {
       "state": "passing",
       "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
@@ -52,6 +53,7 @@
     "tdd-ratchet::state_transitions$renamed_test_is_not_treated_as_new_or_missing": "passing",
     "tdd-ratchet::state_transitions$tracked_test_missing_from_run_is_rejected": "passing",
     "tdd-ratchet::status_file$empty_status_file_parses_to_empty_map": "passing",
+    "tdd-ratchet::status_file$historical_parser_ignores_unknown_top_level_fields": "pending",
     "tdd-ratchet::status_file$malformed_json_returns_clear_error": "passing",
     "tdd-ratchet::status_file$per_test_baseline_mixed_with_simple_entries": {
       "state": "passing",
