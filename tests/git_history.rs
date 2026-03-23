@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use tdd_ratchet::history::{check_history, HistoryViolation};
+use tdd_ratchet::history::{HistoryViolation, check_history};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")

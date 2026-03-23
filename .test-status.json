@@ -1,78 +1,306 @@
 {
   "$schema": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
   "tests": {
-    "tdd-ratchet::bypass_prevention$cargo_test_with_ratchet_env_passes_gatekeeper": "passing",
-    "tdd-ratchet::bypass_prevention$cargo_test_without_ratchet_env_fails_with_instructions": "passing",
-    "tdd-ratchet::end_to_end$adoption_existing_project_grandfathers_tests": "passing",
-    "tdd-ratchet::end_to_end$full_setup_and_tdd_workflow_from_scratch": "passing",
-    "tdd-ratchet::end_to_end$happy_path_tdd_workflow": "passing",
-    "tdd-ratchet::end_to_end$init_creates_empty_status_file": "passing",
-    "tdd-ratchet::end_to_end$rejects_bad_git_history_skipped_pending": "passing",
-    "tdd-ratchet::end_to_end$rejects_disappeared_test": "passing",
-    "tdd-ratchet::end_to_end$rejects_regression": "passing",
-    "tdd-ratchet::end_to_end$rejects_test_that_passes_immediately": "passing",
-    "tdd-ratchet::end_to_end$two_new_tests_one_passes_one_fails": "passing",
-    "tdd-ratchet::end_to_end$zero_tests_project_succeeds": "passing",
-    "tdd-ratchet::error_messages$all_violation_variants_are_covered": "passing",
-    "tdd-ratchet::error_messages$new_test_passed_error_has_context_problem_suggestion": "passing",
-    "tdd-ratchet::error_messages$regression_error_has_context_problem_suggestion": "passing",
-    "tdd-ratchet::error_messages$test_disappeared_error_has_context_problem_suggestion": "passing",
+    "tdd-ratchet::bypass_prevention$cargo_test_with_ratchet_env_passes_gatekeeper": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::bypass_prevention$cargo_test_without_ratchet_env_fails_with_instructions": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$adoption_existing_project_grandfathers_tests": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$first_run_without_committed_status_accepts_failing_test": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$first_run_without_committed_status_rejects_passing_test": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$full_setup_and_tdd_workflow_from_scratch": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$happy_path_tdd_workflow": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$init_creates_empty_status_file": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$rejects_bad_git_history_skipped_pending": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$rejects_disappeared_test": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$rejects_regression": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$rejects_test_that_passes_immediately": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$rename_commit_transfers_test_identity": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$rename_is_rejected_when_old_name_still_appears_in_results": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$stale_rename_mapping_warns_but_does_not_fail": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$two_new_tests_one_passes_one_fails": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$uncommitted_status_file_edits_do_not_change_ratchet_input": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$zero_tests_project_succeeds": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
     "tdd-ratchet::gatekeeper$tdd_ratchet_gatekeeper": "passing",
-    "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
+    "tdd-ratchet::git_history$committed_rename_bridges_history_identity": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$first_status_snapshot_grandfathers_existing_tests": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$historical_snapshots_ignore_unknown_top_level_fields": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$later_removed_tests_do_not_keep_old_history_violations_alive": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$no_status_file_in_history_is_ok": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
     "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {
       "state": "passing",
-      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::git_history$test_appeared_as_pending_then_passing_is_ok": "passing",
-    "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": "passing",
-    "tdd-ratchet::state_transitions$empty_results_nonempty_status_all_rejected_as_missing": "passing",
-    "tdd-ratchet::state_transitions$empty_status_all_tests_fail_all_accepted_as_pending": "passing",
-    "tdd-ratchet::state_transitions$empty_status_all_tests_pass_all_rejected": "passing",
-    "tdd-ratchet::state_transitions$ignored_tests_are_not_counted_as_disappeared": "passing",
-    "tdd-ratchet::state_transitions$multiple_violations_all_reported": "passing",
-    "tdd-ratchet::state_transitions$new_test_that_fails_is_accepted_as_pending": "passing",
-    "tdd-ratchet::state_transitions$new_test_that_passes_is_rejected": "passing",
-    "tdd-ratchet::state_transitions$passing_test_now_fails_is_rejected": "passing",
-    "tdd-ratchet::state_transitions$passing_test_still_passing_is_ok": "passing",
-    "tdd-ratchet::state_transitions$pending_test_still_failing_is_ok": "passing",
-    "tdd-ratchet::state_transitions$pending_test_that_now_passes_is_promoted": "passing",
-    "tdd-ratchet::state_transitions$tracked_test_missing_from_run_is_rejected": "passing",
-    "tdd-ratchet::status_file$empty_status_file_parses_to_empty_map": "passing",
-    "tdd-ratchet::status_file$malformed_json_returns_clear_error": "passing",
+    "tdd-ratchet::git_history$removed_tests_stop_participating_in_history_checks": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$test_appeared_as_passing_in_first_status_snapshot_is_grandfathered": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$test_appeared_as_pending_then_passing_is_ok": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::report_messages$disappeared_test_report_explains_the_rule_and_cleanup": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::report_messages$missing_gatekeeper_report_explains_bypass_prevention": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::report_messages$new_test_passed_report_uses_common_explanatory_fields": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::report_messages$regression_report_names_the_regressed_tests_and_explains_the_fix": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::report_messages$rename_violation_report_explains_identity_bridge_requirements": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::report_messages$rename_warning_report_is_also_self_documenting": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$empty_results_nonempty_status_all_rejected_as_missing": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$empty_status_all_tests_fail_all_accepted_as_pending": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$empty_status_all_tests_pass_all_rejected": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$ignored_tests_are_not_counted_as_disappeared": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$invalid_rename_is_reported": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$multiple_violations_all_reported": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$new_test_that_fails_is_accepted_as_pending": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$new_test_that_passes_is_rejected": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$passing_test_now_fails_is_rejected": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$passing_test_still_passing_is_ok": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$pending_test_still_failing_is_ok": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$pending_test_that_now_passes_is_promoted": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$promoting_test_preserves_baseline_metadata": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$renamed_test_is_not_treated_as_new_or_missing": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::state_transitions$tracked_test_missing_from_run_is_rejected": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$empty_status_file_parses_to_empty_map": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$historical_parser_ignores_unknown_top_level_fields": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$legacy_global_baseline_field_is_rejected": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$malformed_json_returns_clear_error": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
     "tdd-ratchet::status_file$per_test_baseline_mixed_with_simple_entries": {
       "state": "passing",
-      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
     "tdd-ratchet::status_file$per_test_baseline_object_form_parses": {
       "state": "passing",
-      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::status_file$round_trip_write_then_read": "passing",
-    "tdd-ratchet::status_file$save_always_writes_schema_key": "passing",
+    "tdd-ratchet::status_file$round_trip_write_then_read": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$save_always_writes_schema_key": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
     "tdd-ratchet::status_file$save_normalizes_simple_entries_as_strings": {
       "state": "passing",
-      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
     "tdd-ratchet::status_file$save_preserves_per_test_baseline_as_object": {
       "state": "passing",
-      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::status_file$saved_file_is_human_readable_json": "passing",
-    "tdd-ratchet::status_file$schema_field_is_accepted": "passing",
+    "tdd-ratchet::status_file$saved_file_is_human_readable_json": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$schema_accepts_renames_section": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$schema_field_is_accepted": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
     "tdd-ratchet::status_file$schema_validates_status_file": {
       "state": "passing",
-      "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::status_file$status_file_does_not_exist_returns_error": "passing",
-    "tdd-ratchet::status_file$status_file_with_pending_and_passing_loads_correctly": "passing",
-    "tdd-ratchet::status_file$test_name_with_special_characters": "passing",
-    "tdd-ratchet::status_file$unknown_fields_are_rejected": "passing",
-    "tdd-ratchet::test_runner$ignored_tests_are_tracked_as_ignored": "passing",
-    "tdd-ratchet::test_runner$multiple_suites_combined": "passing",
-    "tdd-ratchet::test_runner$no_tests_returns_empty": "passing",
-    "tdd-ratchet::test_runner$non_json_lines_are_skipped": "passing",
-    "tdd-ratchet::test_runner$parses_all_passing": "passing",
-    "tdd-ratchet::test_runner$parses_deeply_nested_module_names": "passing",
-    "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": "passing"
+    "tdd-ratchet::status_file$status_file_does_not_exist_returns_error": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$status_file_with_pending_and_passing_loads_correctly": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$status_file_with_renames_loads_and_round_trips": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$test_name_with_special_characters": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::status_file$unknown_fields_are_rejected": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$ignored_tests_are_tracked_as_ignored": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$multiple_suites_combined": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$no_tests_returns_empty": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$non_json_lines_are_skipped": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$parses_all_passing": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$parses_deeply_nested_module_names": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": {
+      "state": "passing",
+      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    }
   }
 }
