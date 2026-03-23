@@ -74,6 +74,15 @@ pub struct StatusFile {
     pub renames: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct HistoricalStatusFile {
+    #[serde(rename = "$schema", default)]
+    schema: Option<String>,
+    tests: BTreeMap<String, TestEntry>,
+    #[serde(default)]
+    renames: BTreeMap<String, String>,
+}
+
 impl StatusFile {
     pub fn new(tests: BTreeMap<String, TestEntry>) -> Self {
         StatusFile {
@@ -125,6 +134,20 @@ impl StatusFile {
         serde_json::from_str(contents).map_err(|e| StatusFileError::Parse {
             path: path.to_path_buf(),
             source: e,
+        })
+    }
+
+    pub fn parse_historical_from_str(contents: &str, path: &Path) -> Result<Self, StatusFileError> {
+        let historical: HistoricalStatusFile =
+            serde_json::from_str(contents).map_err(|e| StatusFileError::Parse {
+                path: path.to_path_buf(),
+                source: e,
+            })?;
+
+        Ok(StatusFile {
+            schema: historical.schema,
+            tests: historical.tests,
+            renames: historical.renames,
         })
     }
 

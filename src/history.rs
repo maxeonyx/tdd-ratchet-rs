@@ -207,7 +207,7 @@ fn status_file_at_commit(
     let content = std::str::from_utf8(blob.content())
         .map_err(|e| git2::Error::from_str(&format!("Invalid UTF-8 in .test-status.json: {e}")))?;
 
-    match serde_json::from_str::<StatusFile>(content) {
+    match StatusFile::parse_historical_from_str(content, Path::new(".test-status.json")) {
         Ok(sf) => Ok(Some(sf)),
         Err(e) => Err(git2::Error::from_str(&format!(
             "Failed to parse .test-status.json at {}: {}",
