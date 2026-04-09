@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "tdd-ratchet"
-version = "0.2.7"
+version = "0.2.9"
 dependencies = [
  "git2",
  "jsonschema",
