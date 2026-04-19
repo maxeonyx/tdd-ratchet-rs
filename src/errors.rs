@@ -1,6 +1,6 @@
 // Report formatting: produces the complete tdd-ratchet output after a run.
 
-use crate::ratchet::{EvalResult, GATEKEEPER_TEST_NAME, Violation, Warning};
+use crate::ratchet::{EvalResult, Violation, Warning, GATEKEEPER_TEST_NAME};
 use crate::status::TestState;
 
 const SEPARATOR: &str = "───────────────────────────────────────────────────────────────";
@@ -217,7 +217,7 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
             "It relies on `.test-status.json` as the committed record of which tests define the project's expected behavior, so missing tests could hide deleted coverage or an undeclared rename.",
         ),
         problem: format!("{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."),
-        fix: "Check whether the test was accidentally deleted, skipped, or renamed. If you removed it intentionally, add its tracked name to the working-tree `removals` list in `.test-status.json`, run `cargo ratchet`, and commit the removal together with the updated `.test-status.json`. If it was renamed, add a valid `renames` entry so tdd-ratchet can bridge the committed old name to the observed new name, then commit the rename together with the `.test-status.json` update. Otherwise restore the missing test so the committed behavior is still exercised.".into(),
+        fix: "Check whether the test was accidentally deleted, skipped, or renamed. If you removed it intentionally, add its tracked name to the working-tree `removals` list in `.test-status.json`, run `cargo ratchet`, and commit the test removal together with the updated `.test-status.json`. If it was renamed, add a valid `renames` entry so tdd-ratchet can bridge the committed old name to the observed new name, then commit the rename together with the `.test-status.json` update. Otherwise restore the missing test so the committed behavior is still exercised.".into(),
         details,
         extra: None,
     }
