@@ -85,7 +85,7 @@ fn regression_report_names_the_regressed_tests_and_explains_the_fix() {
 }
 
 #[test]
-fn disappeared_test_report_explains_the_rule_and_cleanup() {
+fn disappeared_test_report_explains_the_rule_and_removals_workflow() {
     let report = report_with_violations(vec![Violation::TestDisappeared {
         test: "suite::removed_test".into(),
     }]);
@@ -96,7 +96,8 @@ fn disappeared_test_report_explains_the_rule_and_cleanup() {
         &[
             "suite::removed_test",
             "listed in `.test-status.json` but missing from the current test run",
-            "If you removed it intentionally, run `cargo ratchet` and commit the test removal together with the `.test-status.json` change.",
+            "working-tree `removals` list",
+            "commit the test removal together with the updated `.test-status.json`",
         ],
     );
 }
