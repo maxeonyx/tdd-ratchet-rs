@@ -27,5 +27,5 @@ test must be hermetic:
 - Git history inspection via `git2`
 - Side effects (subprocess calls, filesystem) at the edges behind abstractions
 - Status file input comes from committed git history (`HEAD`), not the working tree — the working tree status file is output only
-- The one exception: the `renames` section is read from the working tree as an instruction channel for the current run
+- The exceptions: `renames` and `removals` sections are read from the working tree as instruction channels for the current run. `renames` persist in the committed output (identity bridge for history); `removals` are transient (dropped from output after application)
 - Every violation message must be self-documenting: why the ratchet exists, what went wrong, what to do about it
