@@ -29,6 +29,10 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::end_to_end$help_flag_prints_usage_without_running_ratchet": {
+      "state": "passing",
+      "baseline": "958ac8134bed77e8c0bd49579387a4dd18426f7b"
+    },
     "tdd-ratchet::end_to_end$init_creates_empty_status_file": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -49,6 +53,9 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::end_to_end$removal_commit_retires_passing_test_without_persisting_removals": "pending",
+    "tdd-ratchet::end_to_end$removal_commit_retires_pending_test": "pending",
+    "tdd-ratchet::end_to_end$removal_conflict_with_rename_is_rejected": "pending",
     "tdd-ratchet::end_to_end$rename_commit_transfers_test_identity": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -68,6 +75,10 @@
     "tdd-ratchet::end_to_end$uncommitted_status_file_edits_do_not_change_ratchet_input": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
+    },
+    "tdd-ratchet::end_to_end$version_flag_prints_version_without_running_ratchet": {
+      "state": "passing",
+      "baseline": "958ac8134bed77e8c0bd49579387a4dd18426f7b"
     },
     "tdd-ratchet::end_to_end$zero_tests_project_succeeds": {
       "state": "passing",
@@ -138,6 +149,8 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::state_transitions$declared_removal_of_passing_test_is_accepted_and_removed_from_output": "pending",
+    "tdd-ratchet::state_transitions$declared_removal_of_pending_test_is_accepted_and_removed_from_output": "pending",
     "tdd-ratchet::state_transitions$empty_results_nonempty_status_all_rejected_as_missing": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -190,10 +203,14 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::state_transitions$removal_conflicting_with_rename_is_reported": "pending",
+    "tdd-ratchet::state_transitions$removal_of_test_still_present_in_results_is_reported": "pending",
+    "tdd-ratchet::state_transitions$removal_of_unknown_test_is_reported": "pending",
     "tdd-ratchet::state_transitions$renamed_test_is_not_treated_as_new_or_missing": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::state_transitions$successful_removal_is_transient_in_output": "pending",
     "tdd-ratchet::state_transitions$tracked_test_missing_from_run_is_rejected": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -242,6 +259,7 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::status_file$schema_accepts_removals_section": "pending",
     "tdd-ratchet::status_file$schema_accepts_renames_section": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -262,6 +280,7 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::status_file$status_file_with_removals_loads_but_does_not_round_trip_them": "pending",
     "tdd-ratchet::status_file$status_file_with_renames_loads_and_round_trips": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -301,14 +320,6 @@
     "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
-    },
-    "tdd-ratchet::end_to_end$help_flag_prints_usage_without_running_ratchet": {
-      "state": "passing",
-      "baseline": "958ac8134bed77e8c0bd49579387a4dd18426f7b"
-    },
-    "tdd-ratchet::end_to_end$version_flag_prints_version_without_running_ratchet": {
-      "state": "passing",
-      "baseline": "958ac8134bed77e8c0bd49579387a4dd18426f7b"
     }
   }
 }
