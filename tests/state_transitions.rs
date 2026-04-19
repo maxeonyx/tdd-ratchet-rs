@@ -238,7 +238,12 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
         ("tdd_ratchet_gatekeeper", TestOutcome::Passed),
     ]);
 
-    let outcome = evaluate(&sf, &tr, &[]);
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
 
     assert!(
         outcome.violations.is_empty(),
@@ -276,7 +281,12 @@ fn invalid_rename_is_reported() {
         ("tdd_ratchet_gatekeeper", TestOutcome::Passed),
     ]);
 
-    let outcome = evaluate(&sf, &tr, &[]);
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
 
     assert!(
         outcome.violations.iter().any(|v| matches!(
