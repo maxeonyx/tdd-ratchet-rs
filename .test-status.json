@@ -125,10 +125,6 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
-    "tdd-ratchet::report_messages$disappeared_test_report_explains_the_rule_and_cleanup": {
-      "state": "passing",
-      "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
-    },
     "tdd-ratchet::report_messages$disappeared_test_report_explains_the_rule_and_removals_workflow": "passing",
     "tdd-ratchet::report_messages$missing_gatekeeper_report_explains_bypass_prevention": {
       "state": "passing",
