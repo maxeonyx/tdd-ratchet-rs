@@ -23,6 +23,7 @@ pub fn format_report(result: &EvalResult) -> String {
     let mut regressions: Vec<&Violation> = Vec::new();
     let mut disappeared: Vec<&Violation> = Vec::new();
     let mut rename_violations: Vec<&Violation> = Vec::new();
+    let mut removal_violations: Vec<&Violation> = Vec::new();
     let mut missing_gatekeeper = false;
 
     for v in &result.violations {
@@ -42,6 +43,11 @@ pub fn format_report(result: &EvalResult) -> String {
             | Violation::RenameNewNameAlreadyTracked { .. }
             | Violation::RenameOldNameMappedMultipleTimes { .. } => {
                 rename_violations.push(v);
+            }
+            Violation::RemovalMissingTrackedTest { .. }
+            | Violation::RemovalTestStillPresent { .. }
+            | Violation::RemovalConflictsWithRename { .. } => {
+                removal_violations.push(v);
             }
             Violation::MissingGatekeeper => {
                 missing_gatekeeper = true;
@@ -79,6 +85,12 @@ pub fn format_report(result: &EvalResult) -> String {
     if !rename_violations.is_empty() {
         out.push_str(&render_section(format_rename_violations(
             &rename_violations,
+        )));
+    }
+
+    if !removal_violations.is_empty() {
+        out.push_str(&render_section(format_removal_violations(
+            &removal_violations,
         )));
     }
 
@@ -205,7 +217,7 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
             "It relies on `.test-status.json` as the committed record of which tests define the project's expected behavior, so missing tests could hide deleted coverage or an undeclared rename.",
         ),
         problem: format!("{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."),
-        fix: "If you removed it intentionally, run `cargo ratchet` and commit the test removal together with the `.test-status.json` change. If you renamed it, add a `renames` entry so tdd-ratchet can bridge the old name to the new one, then commit the rename together with the `.test-status.json` update.".into(),
+        fix: "Check whether the test was accidentally deleted, skipped, or renamed. If you removed it intentionally, add its tracked name to the working-tree `removals` list in `.test-status.json`, run `cargo ratchet`, and commit the removal together with the updated `.test-status.json`. If it was renamed, add a valid `renames` entry so tdd-ratchet can bridge the committed old name to the observed new name, then commit the rename together with the `.test-status.json` update. Otherwise restore the missing test so the committed behavior is still exercised.".into(),
         details,
         extra: None,
     }
@@ -241,6 +253,35 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
         ),
         problem: "A rename instruction is invalid, so tdd-ratchet cannot safely connect the committed test history to the currently observed test name.".into(),
         fix: "To fix it, correct the `renames` entry so it bridges one committed old name to one observed new name, remove any stale or conflicting mappings, and commit the rename together with the `.test-status.json` update.".into(),
+        details,
+        extra: None,
+    }
+}
+
+fn format_removal_violations(removal_violations: &[&Violation]) -> ReportSection {
+    let details = removal_violations
+        .iter()
+        .map(|violation| match violation {
+            Violation::RemovalMissingTrackedTest { test } => detail_line(format!(
+                "{test}: removal target is not present in committed status"
+            )),
+            Violation::RemovalTestStillPresent { test } => detail_line(format!(
+                "{test}: removal target still appears in the current test run"
+            )),
+            Violation::RemovalConflictsWithRename { test } => detail_line(format!(
+                "{test}: removal target also participates in a `renames` entry"
+            )),
+            _ => unreachable!(),
+        })
+        .collect();
+
+    ReportSection {
+        title: "invalid test removal declaration".into(),
+        why: story_14_why(
+            "Intentional test retirement must be explicit, because silently dropping a tracked test would weaken the suite without recording that decision.",
+        ),
+        problem: "A `removals` instruction is invalid, so tdd-ratchet cannot safely retire the tracked test from the committed behavior set.".into(),
+        fix: "Use `removals` only for tests that are currently tracked in committed status, are absent from the current test run, and are not also involved in a rename. Then run `cargo ratchet` and commit the test removal together with the updated `.test-status.json`.".into(),
         details,
         extra: None,
     }

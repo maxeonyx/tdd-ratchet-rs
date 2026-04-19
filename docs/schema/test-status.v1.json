@@ -48,6 +48,14 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "removals": {
+      "type": "array",
+      "description": "Transient list of tracked test names to retire on this run only.",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
     }
   }
 }

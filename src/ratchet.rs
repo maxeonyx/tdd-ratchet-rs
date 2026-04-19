@@ -56,6 +56,12 @@ pub enum Violation {
     RenameNewNameAlreadyTracked { new_name: String, old_name: String },
     /// Multiple rename declarations target the same old name
     RenameOldNameMappedMultipleTimes { old_name: String },
+    /// Removal declared for a test name not present in committed status
+    RemovalMissingTrackedTest { test: String },
+    /// Removal declared for a test that still appears in current results
+    RemovalTestStillPresent { test: String },
+    /// Removal declared for a test that also participates in a rename
+    RemovalConflictsWithRename { test: String },
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +76,12 @@ struct IdentityResolution {
     results: Vec<TestResult>,
     violations: Vec<Violation>,
     warnings: Vec<Warning>,
+}
+
+#[derive(Debug, Clone)]
+struct RemovalResolution {
+    status: TrackedStatus,
+    violations: Vec<Violation>,
 }
 
 /// Evaluate all ratchet rules. Pure function — no IO.
@@ -98,8 +110,11 @@ pub fn evaluate(
     violations.extend(identity.violations);
     warnings.extend(identity.warnings);
 
+    let removals = apply_removal_instructions(&identity.status, instructions, &identity.results);
+    violations.extend(removals.violations);
+
     // 2. Apply ratchet rules (state transitions)
-    let transition_outcome = apply_transitions(&identity.status, &identity.results);
+    let transition_outcome = apply_transitions(&removals.status, &identity.results);
     violations.extend(
         transition_outcome
             .violations
@@ -150,7 +165,8 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
     let tracked_status = status.tracked_status();
     let instructions = status.working_tree_instructions();
     let identity = apply_rename_instructions(&tracked_status, &instructions, results);
-    let transition_outcome = apply_transitions(&identity.status, &identity.results);
+    let removals = apply_removal_instructions(&identity.status, &instructions, &identity.results);
+    let transition_outcome = apply_transitions(&removals.status, &identity.results);
 
     let violations = transition_outcome
         .violations
@@ -273,6 +289,50 @@ fn apply_rename_instructions(
 
 fn observed_test_names(results: &[TestResult]) -> BTreeSet<&str> {
     results.iter().map(|result| result.name.as_str()).collect()
+}
+
+fn apply_removal_instructions(
+    status: &TrackedStatus,
+    instructions: &WorkingTreeInstructions,
+    results: &[TestResult],
+) -> RemovalResolution {
+    let mut updated_status = status.clone();
+    let result_names = observed_test_names(results);
+    let rename_participants = rename_participants(instructions);
+    let mut violations = Vec::new();
+
+    for test in &instructions.removals {
+        if rename_participants.contains(test.as_str()) {
+            violations.push(Violation::RemovalConflictsWithRename { test: test.clone() });
+            continue;
+        }
+
+        if !updated_status.tests.contains_key(test) {
+            violations.push(Violation::RemovalMissingTrackedTest { test: test.clone() });
+            continue;
+        }
+
+        if result_names.contains(test.as_str()) {
+            violations.push(Violation::RemovalTestStillPresent { test: test.clone() });
+            continue;
+        }
+
+        updated_status.tests.remove(test);
+    }
+
+    RemovalResolution {
+        status: updated_status,
+        violations,
+    }
+}
+
+fn rename_participants(instructions: &WorkingTreeInstructions) -> BTreeSet<&str> {
+    let mut names = BTreeSet::new();
+    for (new_name, old_name) in &instructions.renames {
+        names.insert(new_name.as_str());
+        names.insert(old_name.as_str());
+    }
+    names
 }
 
 fn tracked_test_state_in(tracked_status: &TrackedStatus, test_name: &str) -> Option<TestState> {
