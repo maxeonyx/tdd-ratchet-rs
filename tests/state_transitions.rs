@@ -297,3 +297,210 @@ fn invalid_rename_is_reported() {
         outcome.violations
     );
 }
+
+#[test]
+fn declared_removal_of_passing_test_is_accepted_and_removed_from_output() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "tracked_test": "passing",
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "removals": [
+    "tracked_test"
+  ]
+}"#,
+    )
+    .expect("removal support should parse");
+    let tr = results(&[("tdd_ratchet_gatekeeper", TestOutcome::Passed)]);
+
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
+
+    assert!(
+        outcome.violations.is_empty(),
+        "Declared removal should succeed: {:?}",
+        outcome.violations
+    );
+    assert!(
+        !outcome.updated.tests.contains_key("tracked_test"),
+        "Removed test should be absent from output: {:?}",
+        outcome.updated.tests
+    );
+}
+
+#[test]
+fn declared_removal_of_pending_test_is_accepted_and_removed_from_output() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "tracked_test": "pending",
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "removals": [
+    "tracked_test"
+  ]
+}"#,
+    )
+    .expect("removal support should parse");
+    let tr = results(&[("tdd_ratchet_gatekeeper", TestOutcome::Passed)]);
+
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
+
+    assert!(
+        outcome.violations.is_empty(),
+        "Pending test removal should succeed: {:?}",
+        outcome.violations
+    );
+    assert!(
+        !outcome.updated.tests.contains_key("tracked_test"),
+        "Removed pending test should be absent from output: {:?}",
+        outcome.updated.tests
+    );
+}
+
+#[test]
+fn removal_of_unknown_test_is_reported() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "removals": [
+    "missing_test"
+  ]
+}"#,
+    )
+    .expect("removal support should parse");
+    let tr = results(&[("tdd_ratchet_gatekeeper", TestOutcome::Passed)]);
+
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
+
+    assert!(
+        outcome
+            .violations
+            .iter()
+            .any(|v| format!("{v:?}").contains("Removal")),
+        "Unknown removal should be reported as a removal validation error: {:?}",
+        outcome.violations
+    );
+}
+
+#[test]
+fn removal_of_test_still_present_in_results_is_reported() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "tracked_test": "passing",
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "removals": [
+    "tracked_test"
+  ]
+}"#,
+    )
+    .expect("removal support should parse");
+    let tr = results(&[
+        ("tracked_test", TestOutcome::Passed),
+        ("tdd_ratchet_gatekeeper", TestOutcome::Passed),
+    ]);
+
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
+
+    assert!(
+        outcome
+            .violations
+            .iter()
+            .any(|v| format!("{v:?}").contains("Removal")),
+        "Removal of observed test should be reported: {:?}",
+        outcome.violations
+    );
+}
+
+#[test]
+fn removal_conflicting_with_rename_is_reported() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "old_test": "passing",
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "renames": {
+    "new_test": "old_test"
+  },
+  "removals": [
+    "old_test"
+  ]
+}"#,
+    )
+    .expect("removal support should parse");
+    let tr = results(&[
+        ("new_test", TestOutcome::Passed),
+        ("tdd_ratchet_gatekeeper", TestOutcome::Passed),
+    ]);
+
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
+
+    assert!(
+        outcome
+            .violations
+            .iter()
+            .any(|v| format!("{v:?}").contains("Removal")),
+        "Rename/removal conflict should be reported: {:?}",
+        outcome.violations
+    );
+}
+
+#[test]
+fn successful_removal_is_transient_in_output() {
+    let sf: StatusFile = serde_json::from_str(
+        r#"{
+  "tests": {
+    "tracked_test": "passing",
+    "tdd_ratchet_gatekeeper": "passing"
+  },
+  "removals": [
+    "tracked_test"
+  ]
+}"#,
+    )
+    .expect("removal support should parse");
+    let tr = results(&[("tdd_ratchet_gatekeeper", TestOutcome::Passed)]);
+
+    let outcome = evaluate(
+        &sf.tracked_status(),
+        &sf.working_tree_instructions(),
+        &tr,
+        &[],
+    );
+
+    let output_json = serde_json::to_string(&outcome.updated).unwrap();
+    assert!(
+        !output_json.contains("removals"),
+        "Successful removal should not persist removals: {output_json}"
+    );
+}

@@ -199,6 +199,25 @@ fn set_status_renames(dir: &Path, renames: &[(&str, &str)]) {
     .unwrap();
 }
 
+fn set_status_removals(dir: &Path, removals: &[&str]) {
+    let status_path = dir.join(".test-status.json");
+    let mut status: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+
+    status["removals"] = serde_json::Value::Array(
+        removals
+            .iter()
+            .map(|name| serde_json::Value::String((*name).to_string()))
+            .collect(),
+    );
+
+    fs::write(
+        &status_path,
+        serde_json::to_string_pretty(&status).unwrap() + "\n",
+    )
+    .unwrap();
+}
+
 #[test]
 fn init_creates_empty_status_file() {
     build_ratchet_binary();
@@ -686,6 +705,188 @@ fn temporary() {
     assert!(
         out.contains("temporary"),
         "Should name the disappeared test: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn removal_commit_retires_passing_test_without_persisting_removals() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    set_test_file(
+        dir.path(),
+        "retire_me.rs",
+        r#"
+#[test]
+fn retire_me() {
+    panic!("not implemented yet");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Failing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Add failing test");
+
+    set_test_file(
+        dir.path(),
+        "retire_me.rs",
+        r#"
+#[test]
+fn retire_me() {
+    assert!(true);
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Passing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Make test pass");
+
+    fs::remove_file(dir.path().join("tests/retire_me.rs")).unwrap();
+    set_status_removals(dir.path(), &["test-project::retire_me$retire_me"]);
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Declared removal should succeed: {out}");
+
+    let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        !status.contains("test-project::retire_me$retire_me"),
+        "Removed test should be absent from status: {status}"
+    );
+    assert!(
+        !status.contains("\"removals\""),
+        "Removals should not persist in output: {status}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn removal_commit_retires_pending_test() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    set_test_file(
+        dir.path(),
+        "retire_pending.rs",
+        r#"
+#[test]
+fn retire_pending() {
+    panic!("not implemented yet");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Failing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Add failing test");
+
+    fs::remove_file(dir.path().join("tests/retire_pending.rs")).unwrap();
+    set_status_removals(dir.path(), &["test-project::retire_pending$retire_pending"]);
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Declared pending removal should succeed: {out}");
+
+    let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        !status.contains("test-project::retire_pending$retire_pending"),
+        "Removed pending test should be absent from status: {status}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn removal_conflict_with_rename_is_rejected() {
+    build_ratchet_binary();
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "init should succeed: {out}");
+    add_gatekeeper(dir.path());
+    git_add_commit(dir.path(), "Init ratchet");
+
+    set_test_file(
+        dir.path(),
+        "rename_then_remove.rs",
+        r#"
+#[test]
+fn old_name() {
+    assert!(true);
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "New passing test should be rejected first: {out}");
+
+    set_test_file(
+        dir.path(),
+        "rename_then_remove.rs",
+        r#"
+#[test]
+fn old_name() {
+    panic!("not implemented yet");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Failing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Add failing test");
+
+    set_test_file(
+        dir.path(),
+        "rename_then_remove.rs",
+        r#"
+#[test]
+fn old_name() {
+    assert!(true);
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "Passing test should be accepted: {out}");
+    git_add_commit(dir.path(), "Make test pass");
+
+    set_test_file(
+        dir.path(),
+        "rename_then_remove.rs",
+        r#"
+#[test]
+fn new_name() {
+    assert!(true);
+}
+"#,
+    );
+    set_status_renames(
+        dir.path(),
+        &[(
+            "test-project::rename_then_remove$new_name",
+            "test-project::rename_then_remove$old_name",
+        )],
+    );
+    set_status_removals(dir.path(), &["test-project::rename_then_remove$old_name"]);
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "Rename/removal conflict should fail: {out}");
+    assert!(
+        out.contains("conflict")
+            || out.contains("both")
+            || out.contains("rename") && out.contains("remov"),
+        "Conflict should explain the rename/removal clash, not just reject parsing: {out}"
+    );
+    assert!(
+        !out.contains("unknown field `removals`"),
+        "Conflict should fail in ratchet logic, not while parsing status: {out}"
     );
     dir.pass();
 }
