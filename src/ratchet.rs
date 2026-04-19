@@ -3,13 +3,13 @@
 use crate::history::check_history_snapshots;
 use crate::history::{HistorySnapshot, HistoryViolation};
 use crate::runner::{TestOutcome, TestResult};
-use crate::status::{StatusFile, TestState};
+use crate::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone)]
 struct TransitionOutcome {
     violations: Vec<TransitionViolation>,
-    updated: StatusFile,
+    updated: TrackedStatus,
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ pub enum Warning {
 
 #[derive(Debug, Clone)]
 struct IdentityResolution {
-    status: StatusFile,
+    status: TrackedStatus,
     results: Vec<TestResult>,
     violations: Vec<Violation>,
     warnings: Vec<Warning>,
@@ -78,7 +78,8 @@ struct IdentityResolution {
 /// Returns all violations and the updated status file with valid transitions
 /// applied (new pending tests, promotions to passing).
 pub fn evaluate(
-    status: &StatusFile,
+    status: &TrackedStatus,
+    instructions: &WorkingTreeInstructions,
     results: &[TestResult],
     history_snapshots: &[HistorySnapshot],
 ) -> EvalResult {
@@ -93,7 +94,7 @@ pub fn evaluate(
         violations.push(Violation::MissingGatekeeper);
     }
 
-    let identity = resolve_identities(status, results);
+    let identity = apply_rename_instructions(status, instructions, results);
     violations.extend(identity.violations);
     warnings.extend(identity.warnings);
 
@@ -119,7 +120,7 @@ pub fn evaluate(
     EvalResult {
         violations,
         warnings,
-        updated: transition_outcome.updated,
+        updated: StatusFile::from_parts(transition_outcome.updated, instructions.clone()),
     }
 }
 
@@ -146,7 +147,9 @@ pub enum RatchetViolation {
 /// This is the original per-rule check without history or gatekeeper.
 /// Used by unit tests in state_transitions.rs.
 pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutcome {
-    let identity = resolve_identities(status, results);
+    let tracked_status = status.tracked_status();
+    let instructions = status.working_tree_instructions();
+    let identity = apply_rename_instructions(&tracked_status, &instructions, results);
     let transition_outcome = apply_transitions(&identity.status, &identity.results);
 
     let violations = transition_outcome
@@ -163,11 +166,15 @@ pub fn check_ratchet(status: &StatusFile, results: &[TestResult]) -> RatchetOutc
 
     RatchetOutcome {
         violations,
-        updated: transition_outcome.updated,
+        updated: StatusFile::from_parts(transition_outcome.updated, instructions),
     }
 }
 
-fn resolve_identities(status: &StatusFile, results: &[TestResult]) -> IdentityResolution {
+fn apply_rename_instructions(
+    status: &TrackedStatus,
+    instructions: &WorkingTreeInstructions,
+    results: &[TestResult],
+) -> IdentityResolution {
     let mut updated_status = status.clone();
     let mut result_name_map: BTreeMap<String, String> = BTreeMap::new();
     let result_names = observed_test_names(results);
@@ -175,7 +182,7 @@ fn resolve_identities(status: &StatusFile, results: &[TestResult]) -> IdentityRe
     let mut warnings = Vec::new();
     let mut old_name_sources = BTreeMap::<String, Vec<String>>::new();
 
-    for (new_name, old_name) in &status.renames {
+    for (new_name, old_name) in &instructions.renames {
         old_name_sources
             .entry(old_name.clone())
             .or_default()
@@ -188,7 +195,7 @@ fn resolve_identities(status: &StatusFile, results: &[TestResult]) -> IdentityRe
         }
     }
 
-    for (new_name, old_name) in &status.renames {
+    for (new_name, old_name) in &instructions.renames {
         let old_in_status = updated_status.tests.contains_key(old_name);
         let new_in_status = updated_status.tests.contains_key(new_name);
         let old_in_results = result_names.contains(old_name.as_str());
@@ -268,12 +275,15 @@ fn observed_test_names(results: &[TestResult]) -> BTreeSet<&str> {
     results.iter().map(|result| result.name.as_str()).collect()
 }
 
-fn tracked_test_state(status: &StatusFile, test_name: &str) -> Option<TestState> {
-    status.tests.get(test_name).map(|entry| entry.state())
+fn tracked_test_state_in(tracked_status: &TrackedStatus, test_name: &str) -> Option<TestState> {
+    tracked_status
+        .tests
+        .get(test_name)
+        .map(|entry| entry.state())
 }
 
 fn missing_tracked_tests<'a>(
-    status: &'a StatusFile,
+    status: &'a TrackedStatus,
     seen_names: &BTreeSet<&str>,
 ) -> impl Iterator<Item = &'a String> {
     status
@@ -290,14 +300,14 @@ fn map_transition_violation(violation: TransitionViolation) -> Violation {
     }
 }
 
-fn apply_transitions(status: &StatusFile, results: &[TestResult]) -> TransitionOutcome {
+fn apply_transitions(status: &TrackedStatus, results: &[TestResult]) -> TransitionOutcome {
     let mut violations = Vec::new();
     let mut updated = status.clone();
 
     let seen_names = observed_test_names(results);
 
     for result in results {
-        match (tracked_test_state(status, &result.name), result.outcome) {
+        match (tracked_test_state_in(status, &result.name), result.outcome) {
             (None, TestOutcome::Failed) => {
                 updated.set_test_state(result.name.clone(), TestState::Pending);
             }

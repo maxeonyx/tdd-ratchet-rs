@@ -63,6 +63,36 @@ impl TestEntry {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrackedStatus {
+    pub tests: BTreeMap<String, TestEntry>,
+}
+
+impl TrackedStatus {
+    pub fn new(tests: BTreeMap<String, TestEntry>) -> Self {
+        Self { tests }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(BTreeMap::new())
+    }
+
+    pub fn set_test_state(&mut self, test_name: impl Into<String>, state: TestState) {
+        let test_name = test_name.into();
+        let entry = self
+            .tests
+            .get(&test_name)
+            .map(|existing| existing.with_state(state))
+            .unwrap_or(TestEntry::Simple(state));
+        self.tests.insert(test_name, entry);
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkingTreeInstructions {
+    pub renames: BTreeMap<String, String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatusFile {
@@ -85,10 +115,17 @@ struct HistoricalStatusFile {
 
 impl StatusFile {
     pub fn new(tests: BTreeMap<String, TestEntry>) -> Self {
+        StatusFile::from_parts(
+            TrackedStatus::new(tests),
+            WorkingTreeInstructions::default(),
+        )
+    }
+
+    pub fn from_parts(status: TrackedStatus, instructions: WorkingTreeInstructions) -> Self {
         StatusFile {
             schema: None,
-            tests,
-            renames: BTreeMap::new(),
+            tests: status.tests,
+            renames: instructions.renames,
         }
     }
 
@@ -96,14 +133,26 @@ impl StatusFile {
         Self::new(BTreeMap::new())
     }
 
+    pub fn tracked_status(&self) -> TrackedStatus {
+        TrackedStatus {
+            tests: self.tests.clone(),
+        }
+    }
+
+    pub fn into_tracked_status(self) -> TrackedStatus {
+        TrackedStatus { tests: self.tests }
+    }
+
+    pub fn working_tree_instructions(&self) -> WorkingTreeInstructions {
+        WorkingTreeInstructions {
+            renames: self.renames.clone(),
+        }
+    }
+
     pub fn set_test_state(&mut self, test_name: impl Into<String>, state: TestState) {
-        let test_name = test_name.into();
-        let entry = self
-            .tests
-            .get(&test_name)
-            .map(|existing| existing.with_state(state))
-            .unwrap_or(TestEntry::Simple(state));
-        self.tests.insert(test_name, entry);
+        let mut tracked = self.tracked_status();
+        tracked.set_test_state(test_name, state);
+        self.tests = tracked.tests;
     }
 
     pub fn read_from_path(path: &Path) -> Result<Self, StatusFileError> {
