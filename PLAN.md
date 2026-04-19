@@ -20,6 +20,8 @@
 13. ~~As a user of tdd-ratchet, I want the status file in my working tree to be *output only* — the ratchet reads its input from the last committed `.test-status.json` in git history (or the earliest commit containing it), not from the working tree. This prevents bypassing the ratchet by manually editing the status file. The baseline concept may be simplified or eliminated — if the ratchet walks back to the first commit that contains `.test-status.json`, that *is* the baseline.~~ ✅
 14. ~~As a user of tdd-ratchet, I want the ratchet output to be self-documenting. When a violation occurs, it should explain: (a) why the ratchet exists (enforcing test-first discipline), (b) what the specific violation is, (c) what to do about it (e.g. rebase tests and implementation into separate commits). A first-time user encountering the ratchet should understand it without reading external docs.~~ ✅
 
+15. ~~As a user of tdd-ratchet, I want to intentionally remove tests without the ratchet blocking me. A `removals` list in the working-tree `.test-status.json` declares test names to retire. The ratchet validates each removal (name exists in committed status, test is absent from current results, no conflict with renames), removes the entry from the output status file, and rejects undeclared disappearances as before. Unlike `renames`, `removals` is transient — it's read from the working tree as an instruction for the current run and not persisted in the ratchet-generated output. Both `pending` and `passing` tests can be removed.~~ ✅
+
 ### Developer stories
 10. ~~As a developer of tdd-ratchet, I want `git clone` + `{rust toolchain}` to give me a working dev environment.~~ ✅
 11. ~~As a developer of tdd-ratchet, I want CI to run the ratchet's own tests.~~ ✅
@@ -31,9 +33,13 @@
                                        │                     │
                                        ▼                     ▼
                                [still fails: ok]    [still passes: ok]
+
+pending ──[intentional removal]──▶ (not in file)
+passing ──[intentional removal]──▶ (not in file)
 ```
 
 Each transition requires a separate commit. Verified by git history.
+Intentional removal uses the `removals` instruction channel (story 15).
 
 ## Status File
 
@@ -65,6 +71,22 @@ With renames (story 12) — temporary section, valid for one commit:
 The `renames` section maps new name → old name. After the rename
 commit, the ratchet warns that the section can be removed.
 
+With removals (story 15) — temporary section, valid for one run:
+
+```json
+{
+  "tests": {
+    "test_module::other_test": "passing"
+  },
+  "removals": [
+    "test_module::retired_test"
+  ]
+}
+```
+
+The `removals` section lists tests to retire. Unlike `renames`, it is
+transient — read from the working tree and not persisted in the output.
+
 ## Ratchet Algorithm
 
 1. Set `TDD_RATCHET=1` (or equivalent bypass mechanism)
@@ -76,7 +98,7 @@ commit, the ratchet warns that the section can be removed.
    - `pending` test that still fails → ok
    - `passing` test that still passes → ok
    - `passing` test that now fails → **reject** (regression)
-   - Test in status file but not in run → **reject** (silent removal)
+   - Test in status file but not in run → **reject** (silent removal), unless declared in `removals` (story 15)
 4. Inspect git history to verify no test skipped the `pending` state
 5. Update `.test-status.json`
 6. Exit 0 if all rules pass, non-zero otherwise
