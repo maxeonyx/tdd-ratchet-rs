@@ -1,7 +1,7 @@
 // Status file: tracks per-test expected states in .test-status.json
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -91,6 +91,7 @@ impl TrackedStatus {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkingTreeInstructions {
     pub renames: BTreeMap<String, String>,
+    pub removals: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +103,8 @@ pub struct StatusFile {
     pub tests: BTreeMap<String, TestEntry>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub removals: BTreeSet<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +129,7 @@ impl StatusFile {
             schema: None,
             tests: status.tests,
             renames: instructions.renames,
+            removals: BTreeSet::new(),
         }
     }
 
@@ -146,6 +150,7 @@ impl StatusFile {
     pub fn working_tree_instructions(&self) -> WorkingTreeInstructions {
         WorkingTreeInstructions {
             renames: self.renames.clone(),
+            removals: self.removals.clone(),
         }
     }
 
@@ -164,9 +169,11 @@ impl StatusFile {
     }
 
     pub fn write_to_path(&self, path: &Path) -> Result<(), StatusFileError> {
-        // Always write the $schema key
+        // Always write the $schema key. Working-tree removals are transient and
+        // never persisted into the ratchet-generated output.
         let mut with_schema = self.clone();
         with_schema.schema = Some(SCHEMA_URL.to_string());
+        with_schema.removals.clear();
         let contents =
             serde_json::to_string_pretty(&with_schema).map_err(|e| StatusFileError::Serialize {
                 path: path.to_path_buf(),
@@ -197,6 +204,7 @@ impl StatusFile {
             schema: historical.schema,
             tests: historical.tests,
             renames: historical.renames,
+            removals: BTreeSet::new(),
         })
     }
 
