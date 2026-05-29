@@ -11,7 +11,7 @@ use tdd_ratchet::status::{
     StatusFile, TestEntry, TestState, TrackedStatus, WorkingTreeInstructions,
 };
 
-const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using `.test-status.json` plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed `.test-status.json`, enforces the pending→passing workflow, and writes the updated status file back to the working tree.\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Initialize from current test state\n  $ cargo ratchet -x                # Rewrite-only red phase\n";
+const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using `.test-status.json` plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed `.test-status.json`, enforces the pending→passing workflow, and writes the updated status file back to the working tree.\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Initialize from current test state\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n";
 
 struct GatheredRun {
     status: TrackedStatus,
@@ -158,14 +158,14 @@ fn print_actionable_git_error(operation: &str, error: &git2::Error) {
 
 fn classify_git_error(error: &git2::Error) -> GitErrorKind {
     if error.code() == git2::ErrorCode::UnbornBranch {
-        return GitErrorKind::Other;
+        return GitErrorKind::NoCommitsFound;
     }
 
     if error.class() == git2::ErrorClass::Repository
         && error.code() == git2::ErrorCode::NotFound
         && error.message().to_ascii_lowercase().contains("repository")
     {
-        return GitErrorKind::Other;
+        return GitErrorKind::NotGitRepository;
     }
 
     GitErrorKind::Other
