@@ -10,12 +10,16 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn cargo_bin() -> PathBuf {
-    // Build path to our binary
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("target");
-    path.push("debug");
-    path.push("cargo-ratchet");
-    path
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_cargo-ratchet") {
+        return PathBuf::from(path);
+    }
+
+    let exe = std::env::current_exe().expect("test binary path should be available");
+    exe.parent()
+        .and_then(|deps_dir| deps_dir.parent())
+        .map(|target_debug_dir| target_debug_dir.join("cargo-ratchet"))
+        .filter(|path| path.is_file())
+        .expect("cargo-ratchet binary should exist next to integration test binaries")
 }
 
 /// Resolve RUSTUP_HOME for subprocess isolation. When HOME is overridden
@@ -38,15 +42,6 @@ fn cargo_home() -> PathBuf {
         let real_home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
         PathBuf::from(real_home).join(".cargo")
     }
-}
-
-fn build_ratchet_binary() {
-    let status = Command::new("cargo")
-        .args(["build"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .status()
-        .unwrap();
-    assert!(status.success(), "Failed to build tdd-ratchet binary");
 }
 
 fn set_test_file(dir: &Path, file_name: &str, body: &str) {
@@ -220,7 +215,6 @@ fn set_status_removals(dir: &Path, removals: &[&str]) {
 
 #[test]
 fn init_creates_empty_status_file() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -235,7 +229,6 @@ fn init_creates_empty_status_file() {
 
 #[test]
 fn version_flag_prints_version_without_running_ratchet() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -254,14 +247,19 @@ fn version_flag_prints_version_without_running_ratchet() {
 
 #[test]
 fn help_flag_prints_usage_without_running_ratchet() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
     let (ok, out) = run_ratchet_args(dir.path(), &["--help"]);
     assert!(ok, "--help should succeed: {out}");
-    assert!(out.contains("Usage: cargo-ratchet [--init] [--help] [--version]"));
-    assert!(out.contains("--version, -V"));
+    assert!(out.contains("Usage: cargo ratchet [--init] [--help] [--version]"));
+    assert!(
+        out.contains("New tests must fail in one committed run before they are allowed to pass")
+    );
+    assert!(out.contains("Without flags, cargo ratchet runs `cargo nextest`"));
+    assert!(out.contains("Examples:"));
+    assert!(out.contains("$ cargo ratchet --init"));
+    assert!(out.contains("$ cargo ratchet"));
     assert!(
         !dir.path().join(".test-status.json").exists(),
         "--help should not run the ratchet"
@@ -270,8 +268,52 @@ fn help_flag_prints_usage_without_running_ratchet() {
 }
 
 #[test]
+fn running_outside_git_repo_shows_actionable_error() {
+    let dir = TestDir::new();
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "run outside git repo should fail: {out}");
+    assert!(
+        out.contains(
+            "tdd-ratchet: not a git repository. tdd-ratchet must be run inside a git repository."
+        ),
+        "primary error should explain how to run the tool: {out}"
+    );
+    assert!(
+        out.contains("Caused by:"),
+        "error should retain lower-level cause: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn running_in_repo_without_commits_shows_init_guidance() {
+    let dir = TestDir::new();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(dir.path())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("HOME", dir.path())
+        .output()
+        .unwrap();
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(!ok, "run without commits should fail: {out}");
+    assert!(
+        out.contains(
+            "tdd-ratchet: no commits found. Run `cargo ratchet --init`, then commit .test-status.json before running again."
+        ),
+        "primary error should explain the unborn-branch workflow: {out}"
+    );
+    assert!(
+        out.contains("Caused by:"),
+        "error should retain lower-level cause: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
 fn happy_path_tdd_workflow() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -319,7 +361,6 @@ fn my_feature_test() {
 
 #[test]
 fn rename_commit_transfers_test_identity() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -404,7 +445,6 @@ fn new_name() {
 
 #[test]
 fn uncommitted_status_file_edits_do_not_change_ratchet_input() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -446,7 +486,6 @@ fn looks_pending_but_never_committed() {
 
 #[test]
 fn first_run_without_committed_status_accepts_failing_test() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -475,7 +514,6 @@ fn starts_failing() {
 
 #[test]
 fn first_run_without_committed_status_rejects_passing_test() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -503,7 +541,6 @@ fn passes_on_first_run() {
 
 #[test]
 fn rejects_test_that_passes_immediately() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -538,7 +575,6 @@ fn cheater_test() {
 
 #[test]
 fn rename_is_rejected_when_old_name_still_appears_in_results() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -595,7 +631,6 @@ fn new_name() {
 
 #[test]
 fn rejects_regression() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -660,7 +695,6 @@ fn fragile_test() {
 
 #[test]
 fn rejects_disappeared_test() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -711,7 +745,6 @@ fn temporary() {
 
 #[test]
 fn removal_commit_retires_passing_test_without_persisting_removals() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -768,7 +801,6 @@ fn retire_me() {
 
 #[test]
 fn removal_commit_retires_pending_test() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -807,7 +839,6 @@ fn retire_pending() {
 
 #[test]
 fn removal_conflict_with_rename_is_rejected() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -893,7 +924,6 @@ fn new_name() {
 
 #[test]
 fn zero_tests_project_succeeds() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -910,7 +940,6 @@ fn zero_tests_project_succeeds() {
 
 #[test]
 fn two_new_tests_one_passes_one_fails() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -954,7 +983,6 @@ fn rejects_bad_git_history_skipped_pending() {
     // having been "pending" in a prior commit should be rejected.
     // This is the core enforcement: you can't squash "add failing test" +
     // "make it pass" into one commit.
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -1003,7 +1031,6 @@ fn sneaky_test() {
 
 #[test]
 fn stale_rename_mapping_warns_but_does_not_fail() {
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -1070,7 +1097,6 @@ fn adoption_existing_project_grandfathers_tests() {
     // When adopting tdd-ratchet into an existing project that already has
     // passing tests, the first committed status snapshot should grandfather
     // those tests and avoid history violations.
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 
@@ -1140,7 +1166,6 @@ fn new_cheater_test() {
 fn full_setup_and_tdd_workflow_from_scratch() {
     // Simulate the complete user journey, starting from the README.
     // At every step, the user is guided by tdd-ratchet's error messages.
-    build_ratchet_binary();
     let dir = TestDir::new();
     create_test_project(dir.path());
 

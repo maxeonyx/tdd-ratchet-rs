@@ -60,6 +60,8 @@
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
+    "tdd-ratchet::end_to_end$running_in_repo_without_commits_shows_init_guidance": "pending",
+    "tdd-ratchet::end_to_end$running_outside_git_repo_shows_actionable_error": "pending",
     "tdd-ratchet::end_to_end$rename_is_rejected_when_old_name_still_appears_in_results": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
@@ -85,6 +87,7 @@
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"
     },
     "tdd-ratchet::gatekeeper$tdd_ratchet_gatekeeper": "passing",
+    "tdd-ratchet::help_examples$help_examples": "pending",
     "tdd-ratchet::git_history$committed_rename_bridges_history_identity": {
       "state": "passing",
       "baseline": "b3f8bcc5ea1a91de099767c478cac7399abcc74e"

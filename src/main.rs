@@ -11,7 +11,7 @@ use tdd_ratchet::status::{
     StatusFile, TestEntry, TestState, TrackedStatus, WorkingTreeInstructions,
 };
 
-const HELP_TEXT: &str = "Usage: cargo-ratchet [--init] [--help] [--version]\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help, -h      Print help\n  --version, -V   Print version\n";
+const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using `.test-status.json` plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed `.test-status.json`, enforces the pending→passing workflow, and writes the updated status file back to the working tree.\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Initialize from current test state\n  $ cargo ratchet -x                # Rewrite-only red phase\n";
 
 struct GatheredRun {
     status: TrackedStatus,
@@ -116,7 +116,7 @@ fn gather_run(project_dir: &Path) -> GatheredRun {
     let instructions = load_working_tree_instructions(project_dir);
     let results = run_nextest(project_dir, true);
     let history_snapshots = collect_history_snapshots(project_dir).unwrap_or_else(|e| {
-        eprintln!("tdd-ratchet: failed to inspect git history: {e}");
+        print_actionable_git_error("failed to inspect git history", &e);
         process::exit(1);
     });
 
@@ -131,11 +131,50 @@ fn gather_run(project_dir: &Path) -> GatheredRun {
 fn load_committed_status_input(project_dir: &Path) -> TrackedStatus {
     read_head_status(project_dir)
         .unwrap_or_else(|e| {
-            eprintln!("tdd-ratchet: failed to read committed status file: {e}");
+            print_actionable_git_error("failed to read committed status file", &e);
             process::exit(1);
         })
         .map(StatusFile::into_tracked_status)
         .unwrap_or_else(TrackedStatus::empty)
+}
+
+fn print_actionable_git_error(operation: &str, error: &git2::Error) {
+    let message = match classify_git_error(error) {
+        GitErrorKind::NotGitRepository => {
+            "tdd-ratchet: not a git repository. tdd-ratchet must be run inside a git repository."
+        }
+        GitErrorKind::NoCommitsFound => {
+            "tdd-ratchet: no commits found. Run `cargo ratchet --init`, then commit .test-status.json before running again."
+        }
+        GitErrorKind::Other => {
+            eprintln!("tdd-ratchet: {operation}: {error}");
+            return;
+        }
+    };
+
+    eprintln!("{message}");
+    eprintln!("Caused by: {error}");
+}
+
+fn classify_git_error(error: &git2::Error) -> GitErrorKind {
+    if error.code() == git2::ErrorCode::UnbornBranch {
+        return GitErrorKind::Other;
+    }
+
+    if error.class() == git2::ErrorClass::Repository
+        && error.code() == git2::ErrorCode::NotFound
+        && error.message().to_ascii_lowercase().contains("repository")
+    {
+        return GitErrorKind::Other;
+    }
+
+    GitErrorKind::Other
+}
+
+enum GitErrorKind {
+    NotGitRepository,
+    NoCommitsFound,
+    Other,
 }
 
 fn load_working_tree_instructions(project_dir: &Path) -> WorkingTreeInstructions {
