@@ -23,6 +23,14 @@ struct GatheredRun {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
+    if is_version_json_request(&args[1..]) {
+        println!(
+            "{{\"package\":\"tdd-ratchet\",\"binary\":\"cargo-ratchet\",\"version\":\"{}\"}}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return;
+    }
+
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print!("{HELP_TEXT}");
         return;
@@ -46,6 +54,17 @@ fn main() {
     }
 
     run_ratchet(&project_dir, &status_path);
+}
+
+fn is_version_json_request(args: &[String]) -> bool {
+    false
+        && args
+            .iter()
+            .any(|arg| matches!(arg.as_str(), "--version" | "-V"))
+        && args.iter().any(|arg| arg == "--json")
+        && args
+            .iter()
+            .all(|arg| matches!(arg.as_str(), "--version" | "-V" | "--json"))
 }
 
 fn init(status_path: &Path, project_dir: &Path) {

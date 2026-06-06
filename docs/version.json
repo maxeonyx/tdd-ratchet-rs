@@ -1,0 +1,5 @@
+{
+  "package": "tdd-ratchet",
+  "binary": "cargo-ratchet",
+  "version": "0.3.1"
+}
