@@ -100,20 +100,73 @@ pub struct StatusFile {
     /// JSON Schema reference — always set to the canonical URL on save.
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     schema: Option<String>,
+
+    /// Immutable adoption baseline. The commit at which this project began
+    /// enforcing the ratchet. Once set, it must never change (see the
+    /// two-commit immutability check). Absent on projects that adopted before
+    /// this field existed, and on fresh projects until they deliberately set it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<String>,
+
     pub tests: BTreeMap<String, TestEntry>,
+
+    /// Non-test checks (e.g. clippy/fmt) tracked alongside tests. Carried
+    /// through parse/serialize verbatim. tdd-ratchet does not interpret or
+    /// enforce these; the field exists so files that use it are not rejected.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub checks: BTreeMap<String, TestState>,
+
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub removals: BTreeSet<String>,
 }
 
+/// Lenient per-test entry used only on the historical-read path. Accepts the
+/// legacy object form {state, baseline} and the bare string form, keeps state,
+/// discards baseline. The strict path (parse_from_str) does not use this.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum HistoricalTestEntry {
+    Simple(TestState),
+    // `baseline: Option<String>` (not required) so an object form that
+    // somehow lacks baseline still parses; we only care about `state`.
+    WithBaseline {
+        state: TestState,
+        baseline: Option<String>,
+    },
+}
+
+impl HistoricalTestEntry {
+    fn state(&self) -> TestState {
+        match self {
+            HistoricalTestEntry::Simple(s) => *s,
+            HistoricalTestEntry::WithBaseline { state, .. } => *state,
+        }
+    }
+
+    // Retained only while the per-test-baseline grandfathering logic in
+    // history.rs is still live (removed at the cutover). It lets the historical
+    // parser preserve the legacy per-test baseline so that mechanism keeps
+    // working until it is deleted wholesale.
+    fn baseline(&self) -> Option<&str> {
+        match self {
+            HistoricalTestEntry::Simple(_) => None,
+            HistoricalTestEntry::WithBaseline { baseline, .. } => baseline.as_deref(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct HistoricalStatusFile {
     #[serde(rename = "$schema", default)]
     schema: Option<String>,
-    tests: BTreeMap<String, TestEntry>,
+    #[serde(default)]
+    baseline: Option<String>,
+    tests: BTreeMap<String, HistoricalTestEntry>,
     #[serde(default)]
     renames: BTreeMap<String, String>,
+    // No deny_unknown_fields here → top-level unknowns still tolerated.
 }
 
 impl StatusFile {
@@ -127,7 +180,9 @@ impl StatusFile {
     pub fn from_parts(status: TrackedStatus, instructions: WorkingTreeInstructions) -> Self {
         StatusFile {
             schema: None,
+            baseline: None,
             tests: status.tests,
+            checks: BTreeMap::new(),
             renames: instructions.renames,
             removals: BTreeSet::new(),
         }
@@ -202,7 +257,24 @@ impl StatusFile {
 
         Ok(StatusFile {
             schema: historical.schema,
-            tests: historical.tests,
+            baseline: historical.baseline,
+            // Preserve the legacy per-test baseline while history.rs still
+            // consumes it (removed at the cutover, when this becomes `v.state()`).
+            tests: historical
+                .tests
+                .into_iter()
+                .map(|(k, v)| {
+                    let entry = match v.baseline() {
+                        Some(b) => TestEntry::WithBaseline {
+                            state: v.state(),
+                            baseline: b.to_string(),
+                        },
+                        None => TestEntry::Simple(v.state()),
+                    };
+                    (k, entry)
+                })
+                .collect(),
+            checks: BTreeMap::new(),
             renames: historical.renames,
             removals: BTreeSet::new(),
         })
