@@ -51,6 +51,64 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
     status_file_at_commit(&repo, head.id())
 }
 
+/// A violation of the immutable adoption baseline.
+#[derive(Debug, Clone)]
+pub enum BaselineViolation {
+    /// HEAD's adoption baseline points at a commit whose own baseline differs —
+    /// the immutable adoption baseline was moved.
+    Moved {
+        head_baseline: String,
+        pointed_at_baseline: String,
+    },
+}
+
+/// Two-commit immutability check (Max's exact mechanism). Read HEAD's baseline
+/// field B; read the baseline field of the commit B points at; if both exist
+/// and differ, report a violation. Bootstrap (any missing piece) = pass.
+///
+/// This is a lightweight tripwire on an *already-established* baseline link. It
+/// does not detect a forward move from a baseline-less commit, and it cannot
+/// distinguish genuine bootstrap from a typo'd/garbage baseline SHA — all pass.
+pub fn check_adoption_baseline(repo_path: &Path) -> Result<Option<BaselineViolation>, git2::Error> {
+    // RED: deliberately inverted comparison. The real check fires when two
+    // baselines both exist and differ; this broken version reports a violation
+    // in exactly the cases that should pass, and stays silent on the moved-
+    // baseline case that should fire. Both two-commit tests fail. Fixed next.
+    let repo = git2::Repository::open(repo_path)?;
+    let head = repo.head()?.peel_to_commit()?;
+
+    let both_present_and_differ = (|| -> Result<bool, git2::Error> {
+        let Some(head_sf) = status_file_at_commit(&repo, head.id())? else {
+            return Ok(false);
+        };
+        let Some(b) = head_sf.baseline.clone() else {
+            return Ok(false);
+        };
+        let Ok(oid) = git2::Oid::from_str(&b) else {
+            return Ok(false);
+        };
+        if repo.find_commit(oid).is_err() {
+            return Ok(false);
+        }
+        let Some(pointed_sf) = status_file_at_commit(&repo, oid)? else {
+            return Ok(false);
+        };
+        let Some(b_prime) = pointed_sf.baseline.clone() else {
+            return Ok(false);
+        };
+        Ok(b != b_prime)
+    })()?;
+
+    if both_present_and_differ {
+        Ok(None)
+    } else {
+        Ok(Some(BaselineViolation::Moved {
+            head_baseline: "broken".to_string(),
+            pointed_at_baseline: "broken".to_string(),
+        }))
+    }
+}
+
 /// Check history snapshots for TDD violations. Pure function — no IO.
 ///
 /// Verifies that every test that appears as "passing" had a prior

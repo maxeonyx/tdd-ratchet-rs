@@ -9,7 +9,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use tdd_ratchet::history::{HistoryViolation, check_history};
+use tdd_ratchet::history::{
+    BaselineViolation, HistoryViolation, check_adoption_baseline, check_history,
+};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -302,6 +304,79 @@ fn test_first_passing_after_adoption_snapshot_is_flagged() {
             |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "late_cheater")
         ),
         "Test first passing after the adoption snapshot should be flagged: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn two_commit_check_detects_moved_baseline() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    // Commit 1 (C1): carries its own baseline value X.
+    write_status(
+        dir.path(),
+        r#"{"tests":{"a":"passing"},"baseline":"1111111111111111111111111111111111111111"}"#,
+    );
+    commit(dir.path(), "C1 with baseline X");
+    let c1 = head_sha(dir.path());
+
+    // Commit 2 (HEAD): baseline points at C1, but declares a different value Y.
+    write_status(
+        dir.path(),
+        &format!(r#"{{"tests":{{"a":"passing"}},"baseline":"{c1}"}}"#),
+    );
+    commit(dir.path(), "HEAD baseline points at C1");
+
+    let violation = check_adoption_baseline(dir.path()).unwrap();
+    assert!(
+        matches!(violation, Some(BaselineViolation::Moved { .. })),
+        "Moved baseline should be detected: {violation:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn adoption_baseline_bootstrap_passes() {
+    // (a) HEAD has no baseline → pass.
+    let dir = TestDir::new();
+    init_repo(dir.path());
+    write_status(dir.path(), r#"{"tests":{"a":"passing"}}"#);
+    commit(dir.path(), "No baseline");
+    assert!(
+        check_adoption_baseline(dir.path()).unwrap().is_none(),
+        "HEAD with no baseline should pass"
+    );
+    dir.pass();
+
+    // (b) HEAD baseline points at a commit with no baseline field → pass.
+    let dir = TestDir::new();
+    init_repo(dir.path());
+    write_status(dir.path(), r#"{"tests":{"a":"passing"}}"#);
+    commit(dir.path(), "Pointed-at commit, no baseline");
+    let c1 = head_sha(dir.path());
+    write_status(
+        dir.path(),
+        &format!(r#"{{"tests":{{"a":"passing"}},"baseline":"{c1}"}}"#),
+    );
+    commit(dir.path(), "HEAD points at baseline-less commit");
+    assert!(
+        check_adoption_baseline(dir.path()).unwrap().is_none(),
+        "Pointed-at commit with no baseline should pass"
+    );
+    dir.pass();
+
+    // (c) HEAD baseline is an unresolvable SHA → pass.
+    let dir = TestDir::new();
+    init_repo(dir.path());
+    write_status(
+        dir.path(),
+        r#"{"tests":{"a":"passing"},"baseline":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}"#,
+    );
+    commit(dir.path(), "Unresolvable baseline");
+    assert!(
+        check_adoption_baseline(dir.path()).unwrap().is_none(),
+        "Unresolvable baseline SHA should pass"
     );
     dir.pass();
 }
