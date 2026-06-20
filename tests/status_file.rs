@@ -83,12 +83,12 @@ fn unknown_fields_are_rejected() {
 }
 
 #[test]
-fn legacy_global_baseline_field_is_rejected() {
-    let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
+fn strict_parse_rejects_object_form() {
+    let json = r#"{"tests":{"a":{"state":"passing","baseline":"abc"}}}"#;
     let result: Result<StatusFile, _> = serde_json::from_str(json);
     assert!(
         result.is_err(),
-        "Global baseline should no longer be accepted"
+        "Strict parse should reject object-form per-test entries"
     );
 }
 
