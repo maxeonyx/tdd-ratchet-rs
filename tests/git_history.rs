@@ -42,6 +42,17 @@ fn commit(dir: &Path, msg: &str) {
     git(dir, &["commit", "-m", msg, "--allow-empty"]);
 }
 
+fn head_sha(dir: &Path) -> String {
+    let out = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("HOME", dir)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
 #[test]
 fn test_appeared_as_pending_then_passing_is_ok() {
     let dir = TestDir::new();
@@ -285,6 +296,80 @@ fn later_removed_tests_do_not_keep_old_history_violations_alive() {
     assert!(
         violations.is_empty(),
         "Removed tests should not keep old skipped-pending violations alive: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn tests_in_adoption_snapshot_are_trusted() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    // Commit 1: a first status snapshot (so the adoption snapshot is NOT the
+    // first snapshot — that is what distinguishes the new rule from the old
+    // first-snapshot grandfathering).
+    write_status(dir.path(), r#"{"tests":{"early":"passing"}}"#);
+    commit(dir.path(), "First status snapshot");
+    let baseline = head_sha(dir.path());
+
+    // Commit 2: declares baseline = commit 1. This is the first status snapshot
+    // strictly after the baseline, i.e. the adoption snapshot. A test appearing
+    // passing here with no prior pending must be trusted.
+    write_status(
+        dir.path(),
+        &format!(r#"{{"tests":{{"early":"passing","adopted":"passing"}},"baseline":"{baseline}"}}"#),
+    );
+    commit(dir.path(), "Adoption snapshot");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        !violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "adopted")
+        ),
+        "Tests in the adoption snapshot should be trusted: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn test_first_passing_after_adoption_snapshot_is_flagged() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    // Commit 1: first status snapshot.
+    write_status(dir.path(), r#"{"tests":{"early":"passing"}}"#);
+    commit(dir.path(), "First status snapshot");
+    let baseline = head_sha(dir.path());
+
+    // Commit 2: adoption snapshot (baseline = commit 1). "adopted" is trusted.
+    write_status(
+        dir.path(),
+        &format!(r#"{{"tests":{{"early":"passing","adopted":"passing"}},"baseline":"{baseline}"}}"#),
+    );
+    commit(dir.path(), "Adoption snapshot");
+
+    // Commit 3: a brand-new test appears passing AFTER the adoption snapshot
+    // with no prior pending — this must be flagged.
+    write_status(
+        dir.path(),
+        &format!(
+            r#"{{"tests":{{"early":"passing","adopted":"passing","late_cheater":"passing"}},"baseline":"{baseline}"}}"#
+        ),
+    );
+    commit(dir.path(), "Add late cheater");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        !violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "adopted")
+        ),
+        "Adoption-snapshot test should stay trusted: {violations:?}"
+    );
+    assert!(
+        violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "late_cheater")
+        ),
+        "Test first passing after the adoption snapshot should be flagged: {violations:?}"
     );
     dir.pass();
 }
