@@ -60,11 +60,7 @@ pub struct StatusFile {
     /// enforcing the ratchet. Once set, it must never change (see the
     /// two-commit immutability check). Absent on projects that adopted before
     /// this field existed, and on fresh projects until they deliberately set it.
-    #[serde(
-        default,
-        rename = "rewrite_red_baseline",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub baseline: Option<String>,
 
     pub tests: BTreeMap<String, TestState>,
@@ -72,11 +68,7 @@ pub struct StatusFile {
     /// Non-test checks (e.g. clippy/fmt) tracked alongside tests. Carried
     /// through parse/serialize verbatim. tdd-ratchet does not interpret or
     /// enforce these; the field exists so files that use it are not rejected.
-    #[serde(
-        default,
-        rename = "rewrite_red_checks",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub checks: BTreeMap<String, TestState>,
 
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
