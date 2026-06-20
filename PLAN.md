@@ -112,13 +112,32 @@ output prints `test name ... ok/FAILED` — parse with regex. `cargo
 nextest` has structured output which may be easier. Support both,
 detect which is available.
 
-### Git history baseline (revised for story 13)
+### Git history and the adoption baseline
 
-Previous design: baseline is configured per-project. New design: the
-ratchet walks git history to find the earliest commit containing
-`.test-status.json` — that is the implicit baseline. No configuration
-needed. The ratchet reads tracked test states from the committed version
-in `HEAD` (or further back for history validation). The deliberate
+There is no grandfathering. Every test earns its place by failing before
+it passes: the history walk requires each active test that appears as
+`passing` to have had a prior `pending` appearance.
+
+The one sanctioned exception is the **adoption baseline** — a single
+immutable commit recorded in the top-level `baseline` field of
+`.test-status.json`. It names the last commit before the project began
+enforcing the ratchet. The first status snapshot at or after that commit
+is the *adoption snapshot*: everything in it (and before it) is trusted as
+"the suite as it stood at adoption"; every test first appearing as
+`passing` after the adoption snapshot must earn red→green. A project with
+no `baseline` is in bootstrap, where the first status snapshot is the
+adoption snapshot — reproducing the original first-snapshot trust.
+
+The baseline is meant to stay fixed once set. A lightweight two-commit
+check guards it: read HEAD's baseline `B`, read the baseline of the commit
+`B` points at; if both exist and differ, the baseline was moved. This is a
+tripwire on an already-established baseline link, not a tamper-proof
+guarantee — a baseline pointed at a baseline-less commit is bootstrap, so
+the check intentionally does not catch establishing a new forward link.
+
+The ratchet reads tracked test states from the committed version in `HEAD`
+(and further back for history validation), and re-injects the committed
+baseline into the written output each run so it survives. The deliberate
 exception is story 12: working-tree `renames` are an instruction channel
 for the current run, then are saved into the rename commit so history can
 see the identity bridge. This still prevents bypassing the ratchet by
@@ -144,4 +163,3 @@ set it up if missing.
 - Host a formal JSON Schema for `.test-status.json` on GitHub Pages at `tdd-ratchet.maxeonyx.com`
 - Switch from `cargo test` stdout regex parsing to `cargo nextest` structured output (JUnit XML or libtest JSON). Nextest can be required — no need to support both. This would replace `src/runner.rs` entirely.
 - Continue refining the three-phase architecture (Gather → Logic → Output) introduced during story 13. The gather phase now reads committed status from git and the logic phase applies ratchet rules, but history checking is still partially separate. Fully unifying ratchet rules and history rules into a single pure logic phase would be the next structural improvement.
-- Per-test baseline: allow status file entries to be either a string (`"passing"`) or an object (`{ "state": "passing", "baseline": "abc123" }`). With story 13 complete, the first committed status snapshot is the implicit project-wide baseline; per-test baseline remains useful for grandfathering individual tests added later.
