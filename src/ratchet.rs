@@ -62,6 +62,11 @@ pub enum Violation {
     RemovalTestStillPresent { test: String },
     /// Removal declared for a test that also participates in a rename
     RemovalConflictsWithRename { test: String },
+    /// HEAD's adoption baseline points at a commit whose own baseline differs
+    AdoptionBaselineMoved {
+        head_baseline: String,
+        pointed_at_baseline: String,
+    },
 }
 
 #[derive(Debug, Clone)]

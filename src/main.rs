@@ -4,8 +4,11 @@ use std::path::Path;
 use std::process::{self, Command, Stdio};
 
 use tdd_ratchet::errors::format_report;
-use tdd_ratchet::history::{adoption_snapshot_index, collect_history_snapshots, read_head_status};
-use tdd_ratchet::ratchet::evaluate;
+use tdd_ratchet::history::{
+    BaselineViolation, adoption_snapshot_index, check_adoption_baseline, collect_history_snapshots,
+    read_head_status,
+};
+use tdd_ratchet::ratchet::{Violation, evaluate};
 use tdd_ratchet::runner::{TestOutcome, TestResult, parse_nextest_output};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 
@@ -21,6 +24,8 @@ struct GatheredRun {
     /// output so it survives every run (it is an IO/git concern, not a
     /// transition-logic concern, so the pure `evaluate` never sees it).
     committed_baseline: Option<String>,
+    /// Immutability tripwire: set when HEAD's baseline link was moved.
+    baseline_violation: Option<BaselineViolation>,
 }
 
 fn main() {
@@ -103,13 +108,27 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
     let gathered = gather_run(project_dir);
 
     // ── Phase 2: Evaluate (pure) ────────────────────────────────────
-    let result = evaluate(
+    let mut result = evaluate(
         &gathered.status,
         &gathered.instructions,
         &gathered.results,
         &gathered.history_snapshots,
         gathered.adoption_snapshot_idx,
     );
+
+    // The adoption-baseline immutability check is a git-IO concern, computed in
+    // the gather phase; fold it into the unified violation set so all output
+    // flows through one formatter.
+    if let Some(BaselineViolation::Moved {
+        head_baseline,
+        pointed_at_baseline,
+    }) = gathered.baseline_violation
+    {
+        result.violations.push(Violation::AdoptionBaselineMoved {
+            head_baseline,
+            pointed_at_baseline,
+        });
+    }
 
     // ── Phase 3: Output ─────────────────────────────────────────────
     // Always save the updated status file — valid transitions (new
@@ -149,6 +168,10 @@ fn gather_run(project_dir: &Path) -> GatheredRun {
             print_actionable_git_error("failed to resolve adoption baseline", &e);
             process::exit(1);
         });
+    let baseline_violation = check_adoption_baseline(project_dir).unwrap_or_else(|e| {
+        print_actionable_git_error("failed to check adoption baseline", &e);
+        process::exit(1);
+    });
 
     GatheredRun {
         status,
@@ -157,6 +180,7 @@ fn gather_run(project_dir: &Path) -> GatheredRun {
         history_snapshots,
         adoption_snapshot_idx,
         committed_baseline,
+        baseline_violation,
     }
 }
 
