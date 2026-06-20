@@ -1093,71 +1093,40 @@ fn new_name() {
 }
 
 #[test]
-fn adoption_existing_project_grandfathers_tests() {
-    // When adopting tdd-ratchet into an existing project that already has
-    // passing tests, the first committed status snapshot should grandfather
-    // those tests and avoid history violations.
+fn ratchet_run_preserves_existing_top_level_baseline() {
+    // A committed adoption baseline must survive a ratchet run: the run reads
+    // HEAD, evaluates, and writes the status file back, and the baseline must
+    // still be there afterwards (otherwise the dogfood self-destructs).
     let dir = TestDir::new();
     create_test_project(dir.path());
+    add_gatekeeper(dir.path());
 
-    // Add a passing test BEFORE ratchet is initialized — this is the
-    // "existing project" scenario
-    fs::write(
-        dir.path().join("tests/existing.rs"),
-        r#"
-#[test]
-fn legacy_test() {
-    assert!(true);
-}
-"#,
-    )
-    .unwrap();
-    git_add_commit(dir.path(), "Add existing test (pre-ratchet)");
-
-    // Now adopt tdd-ratchet
+    // Establish a committed status file via init + commit.
     let (ok, out) = run_ratchet_init(dir.path());
     assert!(ok, "init should succeed: {out}");
-
-    // Add gatekeeper test (required by tdd-ratchet)
-    fs::write(
-        dir.path().join("tests/gatekeeper.rs"),
-        r#"
-#[test]
-fn tdd_ratchet_gatekeeper() {
-    if std::env::var("TDD_RATCHET").is_err() {
-        panic!("Run tdd-ratchet instead of cargo test.");
-    }
-}
-"#,
-    )
-    .unwrap();
     git_add_commit(dir.path(), "Adopt tdd-ratchet");
 
-    // Run ratchet — legacy_test passes immediately but should be
-    // accepted because it was present in the first committed status snapshot
-    let (ok, out) = run_ratchet(dir.path());
-    assert!(ok, "Ratchet should accept grandfathered test: {out}");
+    // Hand-set a top-level baseline in the committed status file. Any 40-hex
+    // SHA resolves to nothing in this tiny repo → bootstrap for the two-commit
+    // check, but the field itself must be preserved verbatim across runs.
+    let baseline = "0123456789abcdef0123456789abcdef01234567";
+    let status_path = dir.path().join(".test-status.json");
+    let mut status: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+    status["baseline"] = serde_json::Value::String(baseline.to_string());
+    fs::write(&status_path, serde_json::to_string_pretty(&status).unwrap()).unwrap();
+    git_add_commit(dir.path(), "Set adoption baseline");
 
-    // Now add a NEW test that passes immediately — this should be
-    // rejected even though legacy_test was allowed
-    fs::write(
-        dir.path().join("tests/new_cheater.rs"),
-        r#"
-#[test]
-fn new_cheater_test() {
-    assert!(true);
-}
-"#,
-    )
-    .unwrap();
+    // Run the ratchet; it rewrites the working-tree status file.
     let (ok, out) = run_ratchet(dir.path());
-    assert!(
-        !ok,
-        "Ratchet should reject new test that passes immediately: {out}"
-    );
-    assert!(
-        out.contains("new_cheater_test"),
-        "Should name the new offending test: {out}"
+    assert!(ok, "Ratchet run should succeed: {out}");
+
+    let written = fs::read_to_string(&status_path).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&written).unwrap();
+    assert_eq!(
+        parsed["baseline"].as_str(),
+        Some(baseline),
+        "Top-level baseline must survive a ratchet run: {written}"
     );
     dir.pass();
 }

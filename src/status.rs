@@ -24,52 +24,13 @@ impl fmt::Display for TestState {
     }
 }
 
-/// A test entry in the status file. Either a bare state string or an object
-/// with state + per-test baseline for grandfathering.
-///
-/// JSON forms:
-///   "passing"
-///   { "state": "passing", "baseline": "abc123..." }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TestEntry {
-    Simple(TestState),
-    WithBaseline { state: TestState, baseline: String },
-}
-
-impl TestEntry {
-    pub fn state(&self) -> TestState {
-        match self {
-            TestEntry::Simple(s) => *s,
-            TestEntry::WithBaseline { state, .. } => *state,
-        }
-    }
-
-    pub fn with_state(&self, state: TestState) -> Self {
-        match self {
-            TestEntry::Simple(_) => TestEntry::Simple(state),
-            TestEntry::WithBaseline { baseline, .. } => TestEntry::WithBaseline {
-                state,
-                baseline: baseline.clone(),
-            },
-        }
-    }
-
-    pub fn baseline(&self) -> Option<&str> {
-        match self {
-            TestEntry::Simple(_) => None,
-            TestEntry::WithBaseline { baseline, .. } => Some(baseline),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackedStatus {
-    pub tests: BTreeMap<String, TestEntry>,
+    pub tests: BTreeMap<String, TestState>,
 }
 
 impl TrackedStatus {
-    pub fn new(tests: BTreeMap<String, TestEntry>) -> Self {
+    pub fn new(tests: BTreeMap<String, TestState>) -> Self {
         Self { tests }
     }
 
@@ -78,13 +39,7 @@ impl TrackedStatus {
     }
 
     pub fn set_test_state(&mut self, test_name: impl Into<String>, state: TestState) {
-        let test_name = test_name.into();
-        let entry = self
-            .tests
-            .get(&test_name)
-            .map(|existing| existing.with_state(state))
-            .unwrap_or(TestEntry::Simple(state));
-        self.tests.insert(test_name, entry);
+        self.tests.insert(test_name.into(), state);
     }
 }
 
@@ -105,15 +60,23 @@ pub struct StatusFile {
     /// enforcing the ratchet. Once set, it must never change (see the
     /// two-commit immutability check). Absent on projects that adopted before
     /// this field existed, and on fresh projects until they deliberately set it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "rewrite_red_baseline",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub baseline: Option<String>,
 
-    pub tests: BTreeMap<String, TestEntry>,
+    pub tests: BTreeMap<String, TestState>,
 
     /// Non-test checks (e.g. clippy/fmt) tracked alongside tests. Carried
     /// through parse/serialize verbatim. tdd-ratchet does not interpret or
     /// enforce these; the field exists so files that use it are not rejected.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        rename = "rewrite_red_checks",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub checks: BTreeMap<String, TestState>,
 
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -133,6 +96,7 @@ enum HistoricalTestEntry {
     // somehow lacks baseline still parses; we only care about `state`.
     WithBaseline {
         state: TestState,
+        #[allow(dead_code)]
         baseline: Option<String>,
     },
 }
@@ -142,17 +106,6 @@ impl HistoricalTestEntry {
         match self {
             HistoricalTestEntry::Simple(s) => *s,
             HistoricalTestEntry::WithBaseline { state, .. } => *state,
-        }
-    }
-
-    // Retained only while the per-test-baseline grandfathering logic in
-    // history.rs is still live (removed at the cutover). It lets the historical
-    // parser preserve the legacy per-test baseline so that mechanism keeps
-    // working until it is deleted wholesale.
-    fn baseline(&self) -> Option<&str> {
-        match self {
-            HistoricalTestEntry::Simple(_) => None,
-            HistoricalTestEntry::WithBaseline { baseline, .. } => baseline.as_deref(),
         }
     }
 }
@@ -170,7 +123,7 @@ struct HistoricalStatusFile {
 }
 
 impl StatusFile {
-    pub fn new(tests: BTreeMap<String, TestEntry>) -> Self {
+    pub fn new(tests: BTreeMap<String, TestState>) -> Self {
         StatusFile::from_parts(
             TrackedStatus::new(tests),
             WorkingTreeInstructions::default(),
@@ -258,21 +211,10 @@ impl StatusFile {
         Ok(StatusFile {
             schema: historical.schema,
             baseline: historical.baseline,
-            // Preserve the legacy per-test baseline while history.rs still
-            // consumes it (removed at the cutover, when this becomes `v.state()`).
             tests: historical
                 .tests
                 .into_iter()
-                .map(|(k, v)| {
-                    let entry = match v.baseline() {
-                        Some(b) => TestEntry::WithBaseline {
-                            state: v.state(),
-                            baseline: b.to_string(),
-                        },
-                        None => TestEntry::Simple(v.state()),
-                    };
-                    (k, entry)
-                })
+                .map(|(k, v)| (k, v.state()))
                 .collect(),
             checks: BTreeMap::new(),
             renames: historical.renames,

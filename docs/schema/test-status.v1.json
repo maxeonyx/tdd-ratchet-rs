@@ -11,35 +11,26 @@
       "type": "string",
       "description": "Optional JSON Schema reference for editor support."
     },
+    "baseline": {
+      "type": "string",
+      "description": "Immutable adoption baseline: the commit at which this project began enforcing the ratchet. Set once, then never changed.",
+      "pattern": "^[0-9a-f]{40}$"
+    },
     "tests": {
       "type": "object",
       "description": "Map of test names to their expected state. Keys are full nextest names (e.g. 'crate::binary$test_name').",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "enum": ["pending", "passing"],
-            "description": "Expected test state. 'pending' = test is expected to fail (not yet implemented). 'passing' = test is expected to pass."
-          },
-          {
-            "type": "object",
-            "description": "Test entry with per-test baseline for grandfathering.",
-            "required": ["state", "baseline"],
-            "additionalProperties": false,
-            "properties": {
-              "state": {
-                "type": "string",
-                "enum": ["pending", "passing"],
-                "description": "Expected test state."
-              },
-              "baseline": {
-                "type": "string",
-                "description": "Git commit hash at which this test is grandfathered. History checking trusts the status at this commit.",
-                "pattern": "^[0-9a-f]{40}$"
-              }
-            }
-          }
-        ]
+        "type": "string",
+        "enum": ["pending", "passing"],
+        "description": "Expected test state. 'pending' = test is expected to fail (not yet implemented). 'passing' = test is expected to pass."
+      }
+    },
+    "checks": {
+      "type": "object",
+      "description": "Non-test checks (e.g. clippy/fmt) tracked alongside tests. Carried verbatim; not interpreted by tdd-ratchet.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["pending", "passing"]
       }
     },
     "renames": {

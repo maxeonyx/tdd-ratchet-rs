@@ -4,15 +4,10 @@
 
 use tdd_ratchet::ratchet::{RatchetViolation, check_ratchet, evaluate};
 use tdd_ratchet::runner::{TestOutcome, TestResult};
-use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
+use tdd_ratchet::status::{StatusFile, TestState};
 
 fn status(tests: &[(&str, TestState)]) -> StatusFile {
-    StatusFile::new(
-        tests
-            .iter()
-            .map(|(n, s)| (n.to_string(), TestEntry::Simple(*s)))
-            .collect(),
-    )
+    StatusFile::new(tests.iter().map(|(n, s)| (n.to_string(), *s)).collect())
 }
 
 fn results(tests: &[(&str, TestOutcome)]) -> Vec<TestResult> {
@@ -37,10 +32,7 @@ fn new_test_that_fails_is_accepted_as_pending() {
         "Should accept: {:?}",
         outcome.violations
     );
-    assert_eq!(
-        outcome.updated.tests["new_test"].state(),
-        TestState::Pending,
-    );
+    assert_eq!(outcome.updated.tests["new_test"], TestState::Pending);
 }
 
 #[test]
@@ -66,7 +58,7 @@ fn pending_test_that_now_passes_is_promoted() {
     let tr = results(&[("my_test", TestOutcome::Passed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["my_test"].state(), TestState::Passing);
+    assert_eq!(outcome.updated.tests["my_test"], TestState::Passing);
 }
 
 #[test]
@@ -75,7 +67,7 @@ fn pending_test_still_failing_is_ok() {
     let tr = results(&[("my_test", TestOutcome::Failed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["my_test"].state(), TestState::Pending);
+    assert_eq!(outcome.updated.tests["my_test"], TestState::Pending);
 }
 
 // --- Story 6: Passing tests must keep passing ---
@@ -86,7 +78,7 @@ fn passing_test_still_passing_is_ok() {
     let tr = results(&[("my_test", TestOutcome::Passed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["my_test"].state(), TestState::Passing);
+    assert_eq!(outcome.updated.tests["my_test"], TestState::Passing);
 }
 
 #[test]
@@ -157,8 +149,8 @@ fn empty_status_all_tests_fail_all_accepted_as_pending() {
     let tr = results(&[("a", TestOutcome::Failed), ("b", TestOutcome::Failed)]);
     let outcome = check_ratchet(&sf, &tr);
     assert!(outcome.violations.is_empty());
-    assert_eq!(outcome.updated.tests["a"].state(), TestState::Pending);
-    assert_eq!(outcome.updated.tests["b"].state(), TestState::Pending);
+    assert_eq!(outcome.updated.tests["a"], TestState::Pending);
+    assert_eq!(outcome.updated.tests["b"], TestState::Pending);
 }
 
 #[test]
@@ -190,41 +182,11 @@ fn ignored_tests_are_not_counted_as_disappeared() {
 }
 
 #[test]
-fn promoting_test_preserves_baseline_metadata() {
-    let sf = StatusFile::new(
-        [(
-            "my_test".to_string(),
-            TestEntry::WithBaseline {
-                state: TestState::Pending,
-                baseline: "abc123".to_string(),
-            },
-        )]
-        .into_iter()
-        .collect(),
-    );
-    let tr = results(&[("my_test", TestOutcome::Passed)]);
-
-    let outcome = check_ratchet(&sf, &tr);
-
-    assert!(outcome.violations.is_empty());
-    assert_eq!(
-        outcome.updated.tests["my_test"],
-        TestEntry::WithBaseline {
-            state: TestState::Passing,
-            baseline: "abc123".to_string(),
-        }
-    );
-}
-
-#[test]
 fn renamed_test_is_not_treated_as_new_or_missing() {
     let sf: StatusFile = serde_json::from_str(
         r#"{
   "tests": {
-    "old_test": {
-      "state": "passing",
-      "baseline": "abc123"
-    },
+    "old_test": "passing",
     "tdd_ratchet_gatekeeper": "passing"
   },
   "renames": {
@@ -243,6 +205,7 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -252,13 +215,7 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
     );
     assert!(!outcome.updated.tests.contains_key("old_test"));
     assert!(outcome.updated.tests.contains_key("new_test"));
-    assert_eq!(
-        outcome.updated.tests["new_test"],
-        TestEntry::WithBaseline {
-            state: TestState::Passing,
-            baseline: "abc123".to_string(),
-        }
-    );
+    assert_eq!(outcome.updated.tests["new_test"], TestState::Passing);
 }
 
 #[test]
@@ -286,6 +243,7 @@ fn invalid_rename_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -319,6 +277,7 @@ fn declared_removal_of_passing_test_is_accepted_and_removed_from_output() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -354,6 +313,7 @@ fn declared_removal_of_pending_test_is_accepted_and_removed_from_output() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -388,6 +348,7 @@ fn removal_of_unknown_test_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -424,6 +385,7 @@ fn removal_of_test_still_present_in_results_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -463,6 +425,7 @@ fn removal_conflicting_with_rename_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     assert!(
@@ -496,6 +459,7 @@ fn successful_removal_is_transient_in_output() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
+        0,
     );
 
     let output_json = serde_json::to_string(&outcome.updated).unwrap();
