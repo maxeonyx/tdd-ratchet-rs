@@ -94,6 +94,7 @@ pub fn evaluate(
     instructions: &WorkingTreeInstructions,
     results: &[TestResult],
     history_snapshots: &[HistorySnapshot],
+    adoption_snapshot_idx: usize,
 ) -> EvalResult {
     let mut violations = Vec::new();
     let mut warnings = Vec::new();
@@ -123,7 +124,7 @@ pub fn evaluate(
     );
 
     // 3. Check git history
-    let history_violations = check_history_snapshots(history_snapshots);
+    let history_violations = check_history_snapshots(history_snapshots, adoption_snapshot_idx);
     for hv in history_violations {
         match hv {
             HistoryViolation::SkippedPending { test, commit } => {
@@ -336,10 +337,7 @@ fn rename_participants(instructions: &WorkingTreeInstructions) -> BTreeSet<&str>
 }
 
 fn tracked_test_state_in(tracked_status: &TrackedStatus, test_name: &str) -> Option<TestState> {
-    tracked_status
-        .tests
-        .get(test_name)
-        .map(|entry| entry.state())
+    tracked_status.tests.get(test_name).copied()
 }
 
 fn missing_tracked_tests<'a>(

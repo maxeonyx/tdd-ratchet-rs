@@ -54,44 +54,30 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
 /// Check history snapshots for TDD violations. Pure function — no IO.
 ///
 /// Verifies that every test that appears as "passing" had a prior
-/// appearance as "pending". Tests in the first committed status snapshot are
-/// grandfathered. The gatekeeper test is always exempt.
+/// appearance as "pending". The gatekeeper test is always exempt.
 ///
-/// Per-test baselines: extracted from the latest committed status snapshot.
-/// When a test has a per-test baseline pointing to commit X, history checking
-/// for that test starts at X. The test's first appearance at or after X is
-/// grandfathered, just like tests in the first committed status snapshot.
-pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
+/// `adoption_snapshot_idx` is the index (into the oldest→newest `snapshots`
+/// list) of the adoption snapshot: the first status snapshot at or after the
+/// point the project began enforcing the ratchet. Tests whose first appearance
+/// is at or before that index are trusted (the one sanctioned bootstrap window);
+/// every test first appearing as "passing" after it must earn red→green.
+///
+/// In the bootstrap / pre-adoption case (no resolvable baseline), the caller
+/// passes `0`, so the first snapshot is the adoption snapshot — reproducing the
+/// old first-snapshot trust behavior exactly.
+pub fn check_history_snapshots(
+    snapshots: &[HistorySnapshot],
+    adoption_snapshot_idx: usize,
+) -> Vec<HistoryViolation> {
     let mut first_seen = BTreeMap::new();
     let mut identity_aliases = BTreeMap::new();
     let mut violations = Vec::new();
     let active_identities = active_history_identities(snapshots);
 
-    let first_snapshot_commit = snapshots.first().map(|s| s.commit.clone());
-
-    // Collect per-test baselines from the latest committed status snapshot.
-    let per_test_baselines: BTreeMap<String, String> = snapshots
-        .last()
-        .map(|s| {
-            s.status
-                .tests
-                .iter()
-                .filter_map(|(name, entry)| entry.baseline().map(|b| (name.clone(), b.to_string())))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Build a commit-to-index map for efficient ordering lookups.
-    let commit_index: BTreeMap<&str, usize> = snapshots
-        .iter()
-        .enumerate()
-        .map(|(i, s)| (s.commit.as_str(), i))
-        .collect();
-
-    for snapshot in snapshots {
+    for (idx, snapshot) in snapshots.iter().enumerate() {
         record_history_renames(&mut identity_aliases, &snapshot.status);
 
-        for (test_name, entry) in &snapshot.status.tests {
+        for (test_name, state) in &snapshot.status.tests {
             let identity_name = resolve_history_identity(&identity_aliases, test_name);
 
             if !active_identities.contains(identity_name) {
@@ -102,19 +88,11 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
                 continue;
             }
 
-            let state = entry.state();
-
-            if state != TestState::Passing {
+            if *state != TestState::Passing {
                 continue;
             }
 
-            if !is_grandfathered(
-                identity_name,
-                &snapshot.commit,
-                first_snapshot_commit.as_deref(),
-                &per_test_baselines,
-                &commit_index,
-            ) {
+            if !is_grandfathered(identity_name, idx, adoption_snapshot_idx) {
                 violations.push(HistoryViolation::SkippedPending {
                     test: test_name.clone(),
                     commit: snapshot.commit.clone(),
@@ -124,6 +102,48 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
     }
 
     violations
+}
+
+/// Resolve the adoption-snapshot index from the latest snapshot's `baseline`
+/// field. Returns `0` (bootstrap) when there is no baseline, or when the
+/// baseline SHA does not resolve to a commit / has no snapshot at-or-before it.
+///
+/// When the baseline resolves, the adoption snapshot is the first status
+/// snapshot strictly after the newest snapshot whose commit is an
+/// ancestor-or-equal of the baseline SHA.
+pub fn adoption_snapshot_index(
+    repo_path: &Path,
+    snapshots: &[HistorySnapshot],
+) -> Result<usize, git2::Error> {
+    let Some(baseline) = snapshots.last().and_then(|s| s.status.baseline.clone()) else {
+        return Ok(0);
+    };
+
+    let repo = git2::Repository::open(repo_path)?;
+    let Ok(baseline_oid) = git2::Oid::from_str(&baseline) else {
+        return Ok(0);
+    };
+    if repo.find_commit(baseline_oid).is_err() {
+        return Ok(0);
+    }
+
+    // b_idx = newest snapshot whose commit is an ancestor-or-equal of baseline.
+    let mut b_idx = None;
+    for (idx, snapshot) in snapshots.iter().enumerate() {
+        let Ok(oid) = git2::Oid::from_str(&snapshot.commit) else {
+            continue;
+        };
+        let is_ancestor_or_equal =
+            oid == baseline_oid || repo.graph_descendant_of(baseline_oid, oid).unwrap_or(false);
+        if is_ancestor_or_equal {
+            b_idx = Some(idx);
+        }
+    }
+
+    match b_idx {
+        Some(b) => Ok(b + 1),
+        None => Ok(0),
+    }
 }
 
 fn active_history_identities(snapshots: &[HistorySnapshot]) -> BTreeSet<String> {
@@ -168,49 +188,22 @@ fn mark_first_appearance(first_seen: &mut BTreeMap<String, ()>, test_name: &str)
 
 fn is_grandfathered(
     test_name: &str,
-    snapshot_commit: &str,
-    first_snapshot_commit: Option<&str>,
-    per_test_baselines: &BTreeMap<String, String>,
-    commit_index: &BTreeMap<&str, usize>,
+    first_appearance_idx: usize,
+    adoption_snapshot_idx: usize,
 ) -> bool {
-    is_gatekeeper(test_name)
-        || first_snapshot_commit.is_some_and(|first| snapshot_commit == first)
-        || is_grandfathered_by_per_test_baseline(
-            test_name,
-            snapshot_commit,
-            per_test_baselines,
-            commit_index,
-        )
+    is_gatekeeper(test_name) || first_appearance_idx <= adoption_snapshot_idx
 }
 
 fn is_gatekeeper(test_name: &str) -> bool {
     test_name.ends_with(GATEKEEPER_TEST_NAME)
 }
 
-fn is_grandfathered_by_per_test_baseline(
-    test_name: &str,
-    snapshot_commit: &str,
-    per_test_baselines: &BTreeMap<String, String>,
-    commit_index: &BTreeMap<&str, usize>,
-) -> bool {
-    per_test_baselines
-        .get(test_name)
-        .is_some_and(|baseline_commit| {
-            let snapshot_idx = commit_index.get(snapshot_commit);
-            let baseline_idx = commit_index.get(baseline_commit.as_str());
-            match (snapshot_idx, baseline_idx) {
-                (Some(&snapshot_idx), Some(&baseline_idx)) => snapshot_idx >= baseline_idx,
-                (Some(_), None) => true,
-                _ => false,
-            }
-        })
-}
-
 /// Convenience: collect snapshots and check them in one call.
-/// Used by existing callers that don't need the split.
+/// Resolves the adoption snapshot from the latest snapshot's baseline field.
 pub fn check_history(repo_path: &Path) -> Result<Vec<HistoryViolation>, git2::Error> {
     let snapshots = collect_history_snapshots(repo_path)?;
-    Ok(check_history_snapshots(&snapshots))
+    let adoption_idx = adoption_snapshot_index(repo_path, &snapshots)?;
+    Ok(check_history_snapshots(&snapshots, adoption_idx))
 }
 
 /// Read .test-status.json from a specific commit's tree.

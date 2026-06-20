@@ -7,12 +7,12 @@ mod common;
 use common::TestDir;
 use std::collections::BTreeMap;
 use std::fs;
-use tdd_ratchet::status::{StatusFile, TestEntry, TestState};
+use tdd_ratchet::status::{StatusFile, TestState};
 
 fn make_status(tests: &[(&str, TestState)]) -> StatusFile {
     let mut map = BTreeMap::new();
     for (name, state) in tests {
-        map.insert(name.to_string(), TestEntry::Simple(*state));
+        map.insert(name.to_string(), *state);
     }
     StatusFile::new(map)
 }
@@ -28,8 +28,8 @@ fn empty_status_file_parses_to_empty_map() {
 fn status_file_with_pending_and_passing_loads_correctly() {
     let json = r#"{"tests":{"mod::test_a":"passing","mod::test_b":"pending"}}"#;
     let status: StatusFile = serde_json::from_str(json).unwrap();
-    assert_eq!(status.tests["mod::test_a"].state(), TestState::Passing);
-    assert_eq!(status.tests["mod::test_b"].state(), TestState::Pending);
+    assert_eq!(status.tests["mod::test_a"], TestState::Passing);
+    assert_eq!(status.tests["mod::test_b"], TestState::Pending);
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn historical_parser_ignores_unknown_top_level_fields() {
 
     let status = StatusFile::parse_historical_from_str(json, &path).unwrap();
 
-    assert_eq!(status.tests["a"].state(), TestState::Passing);
+    assert_eq!(status.tests["a"], TestState::Passing);
     assert!(status.renames.is_empty());
     dir.pass();
 }
@@ -137,7 +137,7 @@ fn test_name_with_special_characters() {
     let json = r#"{"tests":{"mod::sub::test with spaces & colons: yes":"pending"}}"#;
     let status: StatusFile = serde_json::from_str(json).unwrap();
     assert_eq!(
-        status.tests["mod::sub::test with spaces & colons: yes"].state(),
+        status.tests["mod::sub::test with spaces & colons: yes"],
         TestState::Pending
     );
 }
@@ -163,22 +163,14 @@ fn saved_file_is_human_readable_json() {
 }
 
 #[test]
-fn per_test_baseline_object_form_parses() {
-    let json = r#"{"tests":{"my_test":{"state":"passing","baseline":"abc123"}}}"#;
-    let status: StatusFile = serde_json::from_str(json).unwrap();
-    assert_eq!(status.tests["my_test"].state(), TestState::Passing);
-    assert_eq!(status.tests["my_test"].baseline(), Some("abc123"));
-}
+fn historical_parse_tolerates_object_form() {
+    let dir = TestDir::new();
+    let path = dir.path().join(".test-status.json");
+    let json = r#"{"tests":{"a":{"state":"passing","baseline":"abc123"}}}"#;
 
-#[test]
-fn per_test_baseline_mixed_with_simple_entries() {
-    let json =
-        r#"{"tests":{"simple":"pending","with_baseline":{"state":"passing","baseline":"def456"}}}"#;
-    let status: StatusFile = serde_json::from_str(json).unwrap();
-    assert_eq!(status.tests["simple"].state(), TestState::Pending);
-    assert_eq!(status.tests["simple"].baseline(), None);
-    assert_eq!(status.tests["with_baseline"].state(), TestState::Passing);
-    assert_eq!(status.tests["with_baseline"].baseline(), Some("def456"));
+    let status = StatusFile::parse_historical_from_str(json, &path).unwrap();
+    assert_eq!(status.tests["a"], TestState::Passing);
+    dir.pass();
 }
 
 #[test]
@@ -199,28 +191,21 @@ fn save_normalizes_simple_entries_as_strings() {
 }
 
 #[test]
-fn save_preserves_per_test_baseline_as_object() {
-    let dir = TestDir::new();
-    let path = dir.path().join(".test-status.json");
-
-    let mut tests = BTreeMap::new();
-    tests.insert("simple".to_string(), TestEntry::Simple(TestState::Passing));
-    tests.insert(
-        "grandfathered".to_string(),
-        TestEntry::WithBaseline {
-            state: TestState::Passing,
-            baseline: "abc123".to_string(),
-        },
+fn top_level_baseline_field_is_accepted() {
+    let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
+    let status: StatusFile =
+        serde_json::from_str(json).expect("top-level baseline should be accepted");
+    assert_eq!(
+        status.baseline.as_deref(),
+        Some("0123456789abcdef0123456789abcdef01234567")
     );
-    let status = StatusFile::new(tests);
-    status.save(&path).unwrap();
+}
 
-    let loaded = StatusFile::load(&path).unwrap();
-    assert_eq!(loaded.tests["simple"].state(), TestState::Passing);
-    assert_eq!(loaded.tests["simple"].baseline(), None);
-    assert_eq!(loaded.tests["grandfathered"].state(), TestState::Passing);
-    assert_eq!(loaded.tests["grandfathered"].baseline(), Some("abc123"));
-    dir.pass();
+#[test]
+fn top_level_checks_field_is_accepted() {
+    let json = r#"{"tests":{"a":"passing"},"checks":{"cargo_fmt":"passing"}}"#;
+    let status: StatusFile = serde_json::from_str(json).expect("checks field should be accepted");
+    assert_eq!(status.checks["cargo_fmt"], TestState::Passing);
 }
 
 #[test]
@@ -243,7 +228,7 @@ fn status_file_with_renames_loads_and_round_trips() {
     .unwrap();
 
     let status = StatusFile::load(&path).unwrap();
-    assert_eq!(status.tests["new_test"].state(), TestState::Passing);
+    assert_eq!(status.tests["new_test"], TestState::Passing);
 
     status.save(&path).unwrap();
     let round_trip = fs::read_to_string(&path).unwrap();
@@ -278,7 +263,7 @@ fn status_file_with_removals_loads_but_does_not_round_trip_them() {
     .unwrap();
 
     let status = StatusFile::load(&path).unwrap();
-    assert_eq!(status.tests["other_test"].state(), TestState::Passing);
+    assert_eq!(status.tests["other_test"], TestState::Passing);
 
     status.save(&path).unwrap();
     let round_trip = fs::read_to_string(&path).unwrap();

@@ -72,23 +72,35 @@ fn test_appeared_as_pending_then_passing_is_ok() {
 }
 
 #[test]
-fn test_appeared_as_passing_in_first_status_snapshot_is_grandfathered() {
+fn bootstrap_no_baseline_trusts_first_snapshot() {
     let dir = TestDir::new();
     init_repo(dir.path());
 
-    // Commit 1: no status file
-    fs::write(dir.path().join("README.md"), "hello").unwrap();
-    commit(dir.path(), "Initial");
+    // No baseline anywhere → bootstrap. The first status snapshot is trusted,
+    // exactly as the old first-snapshot grandfathering behaved.
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "First status snapshot");
 
-    // Commit 2: first committed status file contains an existing passing test.
-    // Under story 13, the first status snapshot is the implicit baseline.
-    write_status(dir.path(), r#"{"tests":{"cheater":"passing"}}"#);
-    commit(dir.path(), "Add passing test");
+    // A test first passing in a later snapshot without a prior pending must
+    // still be flagged.
+    write_status(
+        dir.path(),
+        r#"{"tests":{"existing":"passing","cheater":"passing"}}"#,
+    );
+    commit(dir.path(), "Add cheater after first snapshot");
 
     let violations = check_history(dir.path()).unwrap();
     assert!(
-        violations.is_empty(),
-        "First status snapshot should be grandfathered: {violations:?}"
+        !violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "existing")
+        ),
+        "First-snapshot test should be trusted in bootstrap: {violations:?}"
+    );
+    assert!(
+        violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "cheater")
+        ),
+        "Test first passing after the first snapshot should be flagged: {violations:?}"
     );
     dir.pass();
 }
@@ -114,40 +126,6 @@ fn test_pending_for_multiple_commits_then_passing_is_ok() {
 }
 
 #[test]
-fn first_status_snapshot_grandfathers_existing_tests() {
-    let dir = TestDir::new();
-    init_repo(dir.path());
-
-    // Commit 1: first committed status file already contains an existing passing test.
-    // Under the story 13 model, this first snapshot is the implicit baseline.
-    write_status(dir.path(), r#"{"tests":{"old_test":"passing"}}"#);
-    commit(dir.path(), "Old test");
-
-    // Commit 2: new test appears as passing after the first status snapshot — violation.
-    write_status(
-        dir.path(),
-        r#"{"tests":{"old_test":"passing","new_cheater":"passing"}}"#,
-    );
-    commit(dir.path(), "Add cheater after first snapshot");
-
-    let violations = check_history(dir.path()).unwrap();
-    // old_test should be grandfathered by the first snapshot, new_cheater should be flagged
-    assert!(
-        !violations.iter().any(
-            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "old_test")
-        ),
-        "old_test should be grandfathered: {violations:?}"
-    );
-    assert!(
-        violations.iter().any(
-            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "new_cheater")
-        ),
-        "new_cheater should be flagged: {violations:?}"
-    );
-    dir.pass();
-}
-
-#[test]
 fn no_status_file_in_history_is_ok() {
     let dir = TestDir::new();
     init_repo(dir.path());
@@ -157,56 +135,6 @@ fn no_status_file_in_history_is_ok() {
 
     let violations = check_history(dir.path()).unwrap();
     assert!(violations.is_empty());
-    dir.pass();
-}
-
-#[test]
-fn per_test_baseline_grandfathers_individual_test() {
-    let dir = TestDir::new();
-    init_repo(dir.path());
-
-    // Commit 1: no status file yet.
-    fs::write(dir.path().join("README.md"), "hello").unwrap();
-    commit(dir.path(), "Initial");
-
-    // Commit 2: first status snapshot. This is the implicit project baseline.
-    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
-    commit(dir.path(), "Add first status snapshot");
-
-    // Get a commit hash before the test appears, to use as a per-test baseline.
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(dir.path())
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("HOME", dir.path())
-        .output()
-        .unwrap();
-    let baseline_commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    // Commit 3: grandfathered_test appears as passing with per-test baseline,
-    // cheater_test appears as passing without any baseline.
-    let status_json = format!(
-        r#"{{"tests":{{"existing":"passing","grandfathered":{{"state":"passing","baseline":"{baseline_commit}"}},"cheater":"passing"}}}}"#
-    );
-    write_status(dir.path(), &status_json);
-    commit(dir.path(), "Add tests");
-
-    let violations = check_history(dir.path()).unwrap();
-
-    // grandfathered should NOT be flagged (has per-test baseline)
-    assert!(
-        !violations.iter().any(
-            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "grandfathered")
-        ),
-        "grandfathered should not be flagged: {violations:?}"
-    );
-    // cheater SHOULD be flagged (no baseline, skipped pending)
-    assert!(
-        violations.iter().any(
-            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "cheater")
-        ),
-        "cheater should be flagged: {violations:?}"
-    );
     dir.pass();
 }
 
@@ -317,7 +245,9 @@ fn tests_in_adoption_snapshot_are_trusted() {
     // passing here with no prior pending must be trusted.
     write_status(
         dir.path(),
-        &format!(r#"{{"tests":{{"early":"passing","adopted":"passing"}},"baseline":"{baseline}"}}"#),
+        &format!(
+            r#"{{"tests":{{"early":"passing","adopted":"passing"}},"baseline":"{baseline}"}}"#
+        ),
     );
     commit(dir.path(), "Adoption snapshot");
 
@@ -344,7 +274,9 @@ fn test_first_passing_after_adoption_snapshot_is_flagged() {
     // Commit 2: adoption snapshot (baseline = commit 1). "adopted" is trusted.
     write_status(
         dir.path(),
-        &format!(r#"{{"tests":{{"early":"passing","adopted":"passing"}},"baseline":"{baseline}"}}"#),
+        &format!(
+            r#"{{"tests":{{"early":"passing","adopted":"passing"}},"baseline":"{baseline}"}}"#
+        ),
     );
     commit(dir.path(), "Adoption snapshot");
 
