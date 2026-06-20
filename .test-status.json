@@ -28,6 +28,7 @@
     "tdd-ratchet::end_to_end$version_flag_prints_version_without_running_ratchet": "passing",
     "tdd-ratchet::end_to_end$zero_tests_project_succeeds": "passing",
     "tdd-ratchet::gatekeeper$tdd_ratchet_gatekeeper": "passing",
+    "tdd-ratchet::git_history$adoption_baseline_bootstrap_passes": "pending",
     "tdd-ratchet::git_history$bootstrap_no_baseline_trusts_first_snapshot": "passing",
     "tdd-ratchet::git_history$committed_rename_bridges_history_identity": "passing",
     "tdd-ratchet::git_history$historical_snapshots_ignore_unknown_top_level_fields": "passing",
@@ -38,6 +39,7 @@
     "tdd-ratchet::git_history$test_first_passing_after_adoption_snapshot_is_flagged": "passing",
     "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": "passing",
     "tdd-ratchet::git_history$tests_in_adoption_snapshot_are_trusted": "passing",
+    "tdd-ratchet::git_history$two_commit_check_detects_moved_baseline": "pending",
     "tdd-ratchet::help_examples$help_examples": "passing",
     "tdd-ratchet::report_messages$disappeared_test_report_explains_the_rule_and_removals_workflow": "passing",
     "tdd-ratchet::report_messages$missing_gatekeeper_report_explains_bypass_prevention": "passing",
@@ -94,10 +96,5 @@
     "tdd-ratchet::test_runner$parses_deeply_nested_module_names": "passing",
     "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": "passing",
     "tdd-ratchet::version_json$version_json_flag_prints_machine_readable_version": "passing"
-  },
-  "renames": {
-    "tdd-ratchet::end_to_end$ratchet_run_preserves_existing_top_level_baseline": "tdd-ratchet::end_to_end$adoption_existing_project_grandfathers_tests",
-    "tdd-ratchet::git_history$bootstrap_no_baseline_trusts_first_snapshot": "tdd-ratchet::git_history$test_appeared_as_passing_in_first_status_snapshot_is_grandfathered",
-    "tdd-ratchet::status_file$historical_parse_tolerates_object_form": "tdd-ratchet::status_file$per_test_baseline_object_form_parses"
   }
 }
