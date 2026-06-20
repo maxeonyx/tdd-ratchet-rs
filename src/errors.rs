@@ -24,6 +24,7 @@ pub fn format_report(result: &EvalResult) -> String {
     let mut disappeared: Vec<&Violation> = Vec::new();
     let mut rename_violations: Vec<&Violation> = Vec::new();
     let mut removal_violations: Vec<&Violation> = Vec::new();
+    let mut baseline_violations: Vec<&Violation> = Vec::new();
     let mut missing_gatekeeper = false;
 
     for v in &result.violations {
@@ -48,6 +49,9 @@ pub fn format_report(result: &EvalResult) -> String {
             | Violation::RemovalTestStillPresent { .. }
             | Violation::RemovalConflictsWithRename { .. } => {
                 removal_violations.push(v);
+            }
+            Violation::AdoptionBaselineMoved { .. } => {
+                baseline_violations.push(v);
             }
             Violation::MissingGatekeeper => {
                 missing_gatekeeper = true;
@@ -91,6 +95,12 @@ pub fn format_report(result: &EvalResult) -> String {
     if !removal_violations.is_empty() {
         out.push_str(&render_section(format_removal_violations(
             &removal_violations,
+        )));
+    }
+
+    if !baseline_violations.is_empty() {
+        out.push_str(&render_section(format_baseline_violations(
+            &baseline_violations,
         )));
     }
 
@@ -282,6 +292,41 @@ fn format_removal_violations(removal_violations: &[&Violation]) -> ReportSection
         ),
         problem: "A `removals` instruction is invalid, so tdd-ratchet cannot safely retire the tracked test from the committed behavior set.".into(),
         fix: "Use `removals` only for tests that are currently tracked in committed status, are absent from the current test run, and are not also involved in a rename. Then run `cargo ratchet` and commit the test removal together with the updated `.test-status.json`.".into(),
+        details,
+        extra: None,
+    }
+}
+
+// TODO(author): Review this self-documenting violation message for tone and
+// clarity (audience: a developer who hit the adoption-baseline tripwire). The
+// content below follows the design's required substance: explain why the
+// ratchet exists, that the adoption baseline is a single fixed commit, what
+// went wrong (the recorded baseline link changed), and what to do. It must NOT
+// claim `pointed_at_baseline` is "the original" — the check only compares two
+// values and cannot verify which is authoritative. Keep the honest scope: this
+// is a lightweight tripwire on an established baseline link, not a tamper-proof
+// guarantee.
+fn format_baseline_violations(violations: &[&Violation]) -> ReportSection {
+    let details = violations
+        .iter()
+        .map(|violation| match violation {
+            Violation::AdoptionBaselineMoved {
+                head_baseline,
+                pointed_at_baseline,
+            } => detail_line(format!(
+                "HEAD baseline {head_baseline} no longer matches the baseline {pointed_at_baseline} recorded at the commit it points at"
+            )),
+            _ => unreachable!(),
+        })
+        .collect();
+
+    ReportSection {
+        title: "adoption baseline changed".into(),
+        why: story_14_why(
+            "The adoption baseline records the single commit at which ratchet enforcement began; everything committed before it is trusted, everything after it must fail before it can pass. The baseline is meant to stay fixed once set, so this check flags when a previously-recorded baseline link is changed.",
+        ),
+        problem: "HEAD's `.test-status.json` declares an adoption baseline, but the commit it points at declares a different baseline. The adoption baseline has been moved.".into(),
+        fix: "The adoption baseline is meant to stay fixed once a project adopts tdd-ratchet. If this change was unintentional, set the `baseline` field in `.test-status.json` back to the value it had before and commit that. If you are deliberately re-adopting from a different point, that is an intentional decision — update the baseline knowingly.".into(),
         details,
         extra: None,
     }
