@@ -160,6 +160,20 @@ set it up if missing.
 
 ## Future Work
 
+- **Make history rewrite the ONLY way to fix a ratchet violation.** Today the
+  baseline tripwire (see "Git history and the adoption baseline") intentionally
+  does not catch establishing a new forward baseline link: pointing the baseline
+  at a baseline-less commit is treated as bootstrap, so an agent can "fix" a
+  violation by re-adopting / moving the baseline forward onto a fresh anchor
+  instead of rewriting the offending history. That is the wrong fix and the tool
+  currently permits it. The ratchet should reject every escape hatch — moving
+  the baseline, re-`--init`, fresh adoption anchors that grandfather a new
+  passing test — so the only sanctioned response to a violation is rewriting
+  history so the test genuinely goes `pending` → `passing`. The single adoption
+  baseline is allowed ONCE per repo (first adoption); after that, any attempt to
+  re-baseline or forward-move must fail loudly with a message pointing at the
+  history-rewrite procedure. This is the enforcement that would have prevented
+  the trunc/agent-harness re-adoptions during the v1.0.0 rollout.
 - Host a formal JSON Schema for `.test-status.json` on GitHub Pages at `tdd-ratchet.maxeonyx.com`
 - Switch from `cargo test` stdout regex parsing to `cargo nextest` structured output (JUnit XML or libtest JSON). Nextest can be required — no need to support both. This would replace `src/runner.rs` entirely.
 - Continue refining the three-phase architecture (Gather → Logic → Output) introduced during story 13. The gather phase now reads committed status from git and the logic phase applies ratchet rules, but history checking is still partially separate. Fully unifying ratchet rules and history rules into a single pure logic phase would be the next structural improvement.
