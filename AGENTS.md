@@ -2,8 +2,7 @@
 
 This tool is developed from the [agent-tools workspace](https://github.com/maxeonyx/agent-tools); clone and develop there, not from this repo directly.
 
-Read [VISION.md](VISION.md) for what tdd-ratchet does and why.
-Read [PLAN.md](PLAN.md) for stories, state machine, algorithm, and design decisions.
+Read [VISION.md](VISION.md) for what tdd-ratchet does and why. Read [PLAN.md](PLAN.md) for stories, state machine, algorithm, and design decisions.
 
 ## Implementation workflow
 
@@ -17,8 +16,8 @@ Note: tdd-ratchet cannot use itself until it's built. During development, run `T
 
 ## Test isolation
 
-Tests create temporary git repos to simulate consumer projects. Each
-test must be hermetic:
+Tests create temporary git repos to simulate consumer projects. Each test must be hermetic:
+
 - Create a temp directory for all state (fake project, status file)
 - Set `GIT_CONFIG_NOSYSTEM=1` and `HOME` to the temp dir
 - No ambient git config or real project state leaks in
