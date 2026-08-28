@@ -76,11 +76,13 @@ jobs:
       - name: Clippy
         run: cargo clippy -- -D warnings
 
-      - name: Install cargo-nextest
-        run: cargo install cargo-nextest --locked
+      - name: Install cargo-ratchet and cargo-nextest
+        run: |
+          cargo install --path . --locked
+          cargo install cargo-nextest --locked
 
-      - name: Run tdd-ratchet
-        run: cargo run --
+      - name: Run tests (ratchet)
+        run: cargo ratchet
 
   build:
     name: Build (${{ matrix.target }})

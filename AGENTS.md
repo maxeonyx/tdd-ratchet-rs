@@ -4,6 +4,12 @@ This tool is developed from the [agent-tools workspace](https://github.com/maxeo
 
 Read [VISION.md](VISION.md) for what tdd-ratchet does and why. Read [PLAN.md](PLAN.md) for stories, state machine, algorithm, and design decisions.
 
+## TDD ratchet — read before testing
+
+Run `cargo ratchet`, not plain `cargo test`. A new test must be red when first introduced and committed as `pending`; that expected red test keeps CI green. A new test must not pass when first introduced—doing so makes the ratchet and CI red. Implement only after the red commit, then rerun the ratchet and commit the promotion to `passing`.
+
+During tdd-ratchet development, use `TDD_RATCHET=1 cargo test` until the binary is built, then dogfood `cargo ratchet`.
+
 ## Implementation workflow
 
 1. **One story at a time.** Pick the next story from PLAN.md.
@@ -11,8 +17,6 @@ Read [VISION.md](VISION.md) for what tdd-ratchet does and why. Read [PLAN.md](PL
 3. **Implement to make it pass.** Commit when green.
 4. **Update PLAN.md** after completing each story.
 5. **Commit and push frequently.**
-
-Note: tdd-ratchet cannot use itself until it's built. During development, run `TDD_RATCHET=1 cargo test` so the gatekeeper test passes. Once functional, dogfood it.
 
 ## Test isolation
 
