@@ -40,7 +40,7 @@
     "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": "passing",
     "tdd-ratchet::git_history$tests_in_adoption_snapshot_are_trusted": "passing",
     "tdd-ratchet::git_history$two_commit_check_detects_moved_baseline": "passing",
-    "tdd-ratchet::help_examples$help_examples": "pending",
+    "tdd-ratchet::help_examples$help_examples": "passing",
     "tdd-ratchet::report_messages$disappeared_test_report_explains_the_rule_and_removals_workflow": "passing",
     "tdd-ratchet::report_messages$missing_gatekeeper_report_explains_bypass_prevention": "passing",
     "tdd-ratchet::report_messages$new_test_passed_report_uses_common_explanatory_fields": "passing",
