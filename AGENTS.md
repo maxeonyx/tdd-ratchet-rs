@@ -1,6 +1,7 @@
 # tdd-ratchet — Agent Guide
 
-This tool is developed from the [agent-tools workspace](https://github.com/maxeonyx/agent-tools); clone and develop there, not from this repo directly.
+This repository is self-contained for development. A standalone clone must
+build, test, and release without an `agent-tools` checkout.
 
 Read [VISION.md](VISION.md) for what tdd-ratchet does and why. Read [PLAN.md](PLAN.md) for stories, state machine, algorithm, and design decisions.
 
