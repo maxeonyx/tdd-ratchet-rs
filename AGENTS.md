@@ -11,6 +11,20 @@ Run `cargo ratchet`, not plain `cargo test`. A new test must be red when first i
 
 During tdd-ratchet development, use `TDD_RATCHET=1 cargo test` until the binary is built, then dogfood `cargo ratchet`.
 
+## Integration workflow
+
+Run `devenv test` before committing and pushing; it includes `actionlint`, so
+workflow syntax is checked offline. Source CI does not run on push. Open a pull
+request, merge current `main` into the feature branch, then explicitly dispatch:
+
+```bash
+gh workflow run ci.yml --ref <feature-branch> -f pr_number=<number>
+```
+
+The repository-serialized run records the required `Ready` check, builds the
+release artifacts, auto-merges the pull request, publishes those same artifacts,
+and records `integrated-ci` on the exact merge commit.
+
 ## Implementation workflow
 
 1. **One story at a time.** Pick the next story from PLAN.md.

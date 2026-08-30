@@ -1177,7 +1177,7 @@ dependencies = [
 
 [[package]]
 name = "tdd-ratchet"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "assert_cmd",
  "git2",
