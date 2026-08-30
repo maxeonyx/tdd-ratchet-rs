@@ -1,6 +1,0 @@
-{
-  "removals": [
-    "tdd-ratchet::status_file$schema_accepts_removals_section",
-    "tdd-ratchet::status_file$status_file_with_removals_loads_but_does_not_round_trip_them"
-  ]
-}
