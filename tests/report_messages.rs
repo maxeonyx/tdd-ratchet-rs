@@ -68,6 +68,23 @@ fn new_test_passed_report_uses_common_explanatory_fields() {
 }
 
 #[test]
+fn already_working_behavior_guidance_suggests_temporarily_breaking_the_implementation() {
+    let report = report_with_violations(vec![Violation::NewTestPassed {
+        test: "suite::regression_test_for_existing_behavior".into(),
+    }]);
+
+    assert_contains_all(
+        &report,
+        &[
+            "If the behavior already works",
+            "temporarily break the implementation",
+            "commit the test as `pending`",
+            "restore the implementation",
+        ],
+    );
+}
+
+#[test]
 fn regression_report_names_the_regressed_tests_and_explains_the_fix() {
     let report = report_with_violations(vec![Violation::Regression {
         test: "suite::fragile_test".into(),

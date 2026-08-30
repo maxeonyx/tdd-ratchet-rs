@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
-use std::process::{self, Command, Stdio};
+use std::process::{self, Stdio};
 
 use tdd_ratchet::errors::format_report;
 use tdd_ratchet::history::{
@@ -9,7 +9,7 @@ use tdd_ratchet::history::{
     read_head_status,
 };
 use tdd_ratchet::ratchet::{Violation, evaluate};
-use tdd_ratchet::runner::{TestOutcome, TestResult, parse_nextest_output};
+use tdd_ratchet::runner::{TestOutcome, TestResult, nextest_command, parse_nextest_output};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 
 const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using `.test-status.json` plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed `.test-status.json`, enforces the pending→passing workflow, and writes the updated status file back to the working tree.\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Initialize from current test state\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n";
@@ -258,18 +258,7 @@ fn status_entries_from_results(results: &[TestResult]) -> BTreeMap<String, TestS
 }
 
 fn run_nextest(project_dir: &Path, inherit_stderr: bool) -> Vec<TestResult> {
-    let mut command = Command::new("cargo");
-    command
-        .args([
-            "nextest",
-            "run",
-            "--no-fail-fast",
-            "--message-format",
-            "libtest-json",
-        ])
-        .current_dir(project_dir)
-        .env("TDD_RATCHET", "1")
-        .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1");
+    let mut command = nextest_command(project_dir);
 
     if inherit_stderr {
         command.stderr(Stdio::inherit());

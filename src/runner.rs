@@ -2,6 +2,8 @@
 // libtest-json structured output.
 
 use serde::Deserialize;
+use std::path::Path;
+use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestResult {
@@ -14,6 +16,22 @@ pub enum TestOutcome {
     Passed,
     Failed,
     Ignored,
+}
+
+pub fn nextest_command(project_dir: &Path) -> Command {
+    let mut command = Command::new("cargo");
+    command
+        .args([
+            "nextest",
+            "run",
+            "--no-fail-fast",
+            "--message-format",
+            "libtest-json",
+        ])
+        .current_dir(project_dir)
+        .env("TDD_RATCHET", "1")
+        .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1");
+    command
 }
 
 #[derive(Deserialize)]
