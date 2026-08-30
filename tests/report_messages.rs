@@ -79,7 +79,8 @@ fn already_working_behavior_guidance_suggests_temporarily_breaking_the_implement
         &[
             "If the behavior already works",
             "temporarily break the implementation",
-            "commit the test as `pending`",
+            "push the test while it is failing",
+            "wait for the `pending` bot commit",
             "restore the implementation",
         ],
     );
