@@ -35,12 +35,14 @@ Use `cargo ratchet --init` once, before enabling the trusted ledger workflow, to
 
 Declare a deliberate rename or removal in `.tdd-ratchet.json`. The ratchet validates that instruction, records any rename bridge in the ledger, and keeps removals out of the ledger schema. Remove the instruction file after the bot records the transition.
 
+The writer runs for same-repository pull requests. For a fork contribution, a maintainer must first move the commits onto a repository branch so the trusted workflow can validate and record the ledger without granting the fork a write path.
+
 Do not run `cargo test` directly. The ratchet will ask you to add a "gatekeeper" test to enforce this.
 
 ## Developing
 
 ```
-cargo test
+cargo ratchet
 ```
 
 Prerequisites: Rust toolchain.

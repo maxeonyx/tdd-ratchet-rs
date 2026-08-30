@@ -319,7 +319,7 @@ fn format_ledger_history_violations(violations: &[&Violation]) -> ReportSection 
     ReportSection {
         title: "trusted status ledger history violation".into(),
         why: story_14_why(
-            "The first committed `.test-status.json` is the one adoption snapshot. Every later status is an append-only account of tests earning pending, then passing, so deleting or downgrading that account would let a bad test history be disguised.",
+            "The first committed `.test-status.json` is the one adoption snapshot. Later snapshots are a trusted chronological account of tests earning pending, then passing; explicit retirements remain visible in git history. Deleting the ledger or downgrading an earned state would let bad history be disguised.",
         ),
         problem: "Committed history deleted the ledger or rewrote an earned passing state as pending. That history is not a valid ratchet record.".into(),
         fix: "Rewrite the offending commits so `.test-status.json` is never deleted and each test genuinely moves from pending to passing. Do not hand-edit or re-initialize the ledger to repair the violation; bad history must remain bad until the commits themselves are corrected.".into(),

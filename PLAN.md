@@ -98,7 +98,7 @@ The ratchet needs per-test pass/fail results. `cargo test` verbose output prints
 
 The first committed `.test-status.json` is the repository's one adoption snapshot. Tests already present there are trusted; every later test must appear as `pending` before `passing`. There is no movable baseline field and no second adoption. Deleting the ledger, recreating it, rewriting `passing` to `pending`, or removing an old violation does not repair history; only rewriting the offending commits does.
 
-The ratchet reads tracked state from committed history and writes a local preview. On pull requests, an unprivileged validation job runs the ratchet and uploads only that preview. A separate writer job, without a source checkout, validates the artifact and commits exactly `.test-status.json`. Ordinary pull-request commits that touch the ledger are rejected. Developer rename and removal intent comes from `.tdd-ratchet.json`.
+The ratchet reads tracked state from committed history and writes a local preview. On same-repository pull requests, an unprivileged validation job builds the enforcing binary from base-controlled source, runs it against a separate pull-request checkout, and uploads only the preview. A separate writer job, without a source checkout, revalidates transition semantics and commits exactly `.test-status.json` against the verified head. Ordinary pull-request commits that touch the ledger are rejected. Developer rename and removal intent comes from `.tdd-ratchet.json`. Fork commits must be moved onto a maintainer-controlled repository branch before this writer runs.
 
 ### Bypass prevention discussion
 
