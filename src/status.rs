@@ -43,10 +43,26 @@ impl TrackedStatus {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorkingTreeInstructions {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub removals: BTreeSet<String>,
+}
+
+impl WorkingTreeInstructions {
+    pub fn read_from_path(path: &Path) -> Result<Self, StatusFileError> {
+        let contents = std::fs::read_to_string(path).map_err(|e| StatusFileError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
+        serde_json::from_str(&contents).map_err(|e| StatusFileError::Parse {
+            path: path.to_path_buf(),
+            source: e,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,8 +82,6 @@ pub struct StatusFile {
 
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub removals: BTreeSet<String>,
 }
 
 /// Lenient per-test entry used only on the historical-read path. Accepts the
@@ -119,7 +133,6 @@ impl StatusFile {
             tests: status.tests,
             checks: BTreeMap::new(),
             renames: instructions.renames,
-            removals: BTreeSet::new(),
         }
     }
 
@@ -140,7 +153,7 @@ impl StatusFile {
     pub fn working_tree_instructions(&self) -> WorkingTreeInstructions {
         WorkingTreeInstructions {
             renames: self.renames.clone(),
-            removals: self.removals.clone(),
+            removals: BTreeSet::new(),
         }
     }
 
@@ -159,11 +172,9 @@ impl StatusFile {
     }
 
     pub fn write_to_path(&self, path: &Path) -> Result<(), StatusFileError> {
-        // Always write the $schema key. Working-tree removals are transient and
-        // never persisted into the ratchet-generated output.
+        // Always write the $schema key.
         let mut with_schema = self.clone();
         with_schema.schema = Some(SCHEMA_URL.to_string());
-        with_schema.removals.clear();
         let contents =
             serde_json::to_string_pretty(&with_schema).map_err(|e| StatusFileError::Serialize {
                 path: path.to_path_buf(),
@@ -199,7 +210,6 @@ impl StatusFile {
                 .collect(),
             checks: BTreeMap::new(),
             renames: historical.renames,
-            removals: BTreeSet::new(),
         })
     }
 

@@ -171,9 +171,12 @@ fn tdd_ratchet_gatekeeper() {
 }
 
 fn set_status_renames(dir: &Path, renames: &[(&str, &str)]) {
-    let status_path = dir.join(".test-status.json");
-    let mut status: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+    let instructions_path = dir.join(".tdd-ratchet.json");
+    let mut instructions: serde_json::Value = if instructions_path.exists() {
+        serde_json::from_str(&fs::read_to_string(&instructions_path).unwrap()).unwrap()
+    } else {
+        serde_json::json!({})
+    };
 
     let renames_object = renames
         .iter()
@@ -185,21 +188,24 @@ fn set_status_renames(dir: &Path, renames: &[(&str, &str)]) {
         })
         .collect();
 
-    status["renames"] = serde_json::Value::Object(renames_object);
+    instructions["renames"] = serde_json::Value::Object(renames_object);
 
     fs::write(
-        &status_path,
-        serde_json::to_string_pretty(&status).unwrap() + "\n",
+        &instructions_path,
+        serde_json::to_string_pretty(&instructions).unwrap() + "\n",
     )
     .unwrap();
 }
 
 fn set_status_removals(dir: &Path, removals: &[&str]) {
-    let status_path = dir.join(".test-status.json");
-    let mut status: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+    let instructions_path = dir.join(".tdd-ratchet.json");
+    let mut instructions: serde_json::Value = if instructions_path.exists() {
+        serde_json::from_str(&fs::read_to_string(&instructions_path).unwrap()).unwrap()
+    } else {
+        serde_json::json!({})
+    };
 
-    status["removals"] = serde_json::Value::Array(
+    instructions["removals"] = serde_json::Value::Array(
         removals
             .iter()
             .map(|name| serde_json::Value::String((*name).to_string()))
@@ -207,8 +213,8 @@ fn set_status_removals(dir: &Path, removals: &[&str]) {
     );
 
     fs::write(
-        &status_path,
-        serde_json::to_string_pretty(&status).unwrap() + "\n",
+        &instructions_path,
+        serde_json::to_string_pretty(&instructions).unwrap() + "\n",
     )
     .unwrap();
 }

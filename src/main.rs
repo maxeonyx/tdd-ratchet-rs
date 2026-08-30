@@ -206,17 +206,15 @@ enum GitErrorKind {
 }
 
 fn load_working_tree_instructions(project_dir: &Path) -> WorkingTreeInstructions {
-    let status_path = project_dir.join(".test-status.json");
-    if !status_path.exists() {
+    let instructions_path = project_dir.join(".tdd-ratchet.json");
+    if !instructions_path.exists() {
         return WorkingTreeInstructions::default();
     }
 
-    StatusFile::load(&status_path)
-        .map(|status| status.working_tree_instructions())
-        .unwrap_or_else(|e| {
-            eprintln!("tdd-ratchet: failed to read working-tree instructions: {e}");
-            process::exit(1);
-        })
+    WorkingTreeInstructions::read_from_path(&instructions_path).unwrap_or_else(|e| {
+        eprintln!("tdd-ratchet: failed to read .tdd-ratchet.json instructions: {e}");
+        process::exit(1);
+    })
 }
 
 fn status_entries_from_results(results: &[TestResult]) -> BTreeMap<String, TestState> {
