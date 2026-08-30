@@ -24,6 +24,7 @@ pub enum HistoryViolation {
 #[derive(Debug, Clone)]
 pub struct HistorySnapshot {
     pub commit: String,
+    pub parents: Vec<String>,
     pub status: StatusFile,
 }
 
@@ -45,8 +46,13 @@ pub fn collect_history_snapshots(repo_path: &Path) -> Result<Vec<HistorySnapshot
         let oid = oid_result?;
 
         if let Some(sf) = status_file_at_commit(&repo, oid)? {
+            let commit = repo.find_commit(oid)?;
             snapshots.push(HistorySnapshot {
                 commit: oid.to_string(),
+                parents: commit
+                    .parent_ids()
+                    .map(|parent| parent.to_string())
+                    .collect(),
                 status: sf,
             });
         }
