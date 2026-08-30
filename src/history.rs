@@ -2,7 +2,7 @@
 
 use crate::ratchet::GATEKEEPER_TEST_NAME;
 use crate::status::{StatusFile, TestState};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -74,27 +74,33 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
 /// pending, and violations remain visible even if a later snapshot removes the
 /// offending test. The gatekeeper is exempt from the first-appearance rule.
 pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
-    let mut states = BTreeMap::new();
-    let mut identity_aliases = BTreeMap::new();
+    let Some(adoption) = snapshots.first() else {
+        return Vec::new();
+    };
+    let snapshots_by_commit: BTreeMap<&str, &HistorySnapshot> = snapshots
+        .iter()
+        .map(|snapshot| (snapshot.commit.as_str(), snapshot))
+        .collect();
     let mut violations = Vec::new();
 
-    for (idx, snapshot) in snapshots.iter().enumerate() {
-        record_history_renames(&mut identity_aliases, &snapshot.status);
-
+    for snapshot in snapshots {
         for (test_name, state) in &snapshot.status.tests {
-            let identity_name = resolve_history_identity(&identity_aliases, test_name).to_string();
+            let ancestor_states =
+                collect_ancestor_states(snapshot, test_name, &snapshots_by_commit);
 
-            match states.get(&identity_name).copied() {
-                None if idx > 0
-                    && *state == TestState::Passing
-                    && !is_gatekeeper(&identity_name) =>
+            match state {
+                TestState::Passing
+                    if snapshot.commit != adoption.commit
+                        && !ancestor_states.contains(&TestState::Pending)
+                        && !ancestor_states.contains(&TestState::Passing)
+                        && !is_gatekeeper(test_name) =>
                 {
                     violations.push(HistoryViolation::SkippedPending {
                         test: test_name.clone(),
                         commit: snapshot.commit.clone(),
                     });
                 }
-                Some(TestState::Passing) if *state == TestState::Pending => {
+                TestState::Pending if ancestor_states.contains(&TestState::Passing) => {
                     violations.push(HistoryViolation::StateRewritten {
                         test: test_name.clone(),
                         commit: snapshot.commit.clone(),
@@ -104,30 +110,71 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
                 }
                 _ => {}
             }
-
-            states.insert(identity_name, *state);
         }
     }
 
     violations
 }
 
-fn record_history_renames(identity_aliases: &mut BTreeMap<String, String>, status: &StatusFile) {
-    for (new_name, old_name) in &status.renames {
-        let canonical_old_name = resolve_history_identity(identity_aliases, old_name).to_string();
-        identity_aliases.insert(new_name.clone(), canonical_old_name);
+fn collect_ancestor_states(
+    snapshot: &HistorySnapshot,
+    test_name: &str,
+    snapshots_by_commit: &BTreeMap<&str, &HistorySnapshot>,
+) -> Vec<TestState> {
+    let mut initial_names = BTreeSet::from([test_name.to_string()]);
+    expand_identity_names(&mut initial_names, &snapshot.status);
+
+    let mut pending = snapshot
+        .parents
+        .iter()
+        .map(|parent| (parent.clone(), initial_names.clone()))
+        .collect::<Vec<_>>();
+    let mut seen_names_by_commit: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut states = Vec::new();
+
+    while let Some((commit, mut names)) = pending.pop() {
+        let Some(ancestor) = snapshots_by_commit.get(commit.as_str()) else {
+            continue;
+        };
+        expand_identity_names(&mut names, &ancestor.status);
+
+        let seen_names = seen_names_by_commit.entry(commit).or_default();
+        let new_names = names.difference(seen_names).cloned().collect::<Vec<_>>();
+        if new_names.is_empty() {
+            continue;
+        }
+        seen_names.extend(new_names);
+
+        for name in &names {
+            if let Some(state) = ancestor.status.tests.get(name) {
+                states.push(*state);
+            }
+        }
+        pending.extend(
+            ancestor
+                .parents
+                .iter()
+                .map(|parent| (parent.clone(), names.clone())),
+        );
     }
+
+    states
 }
 
-fn resolve_history_identity<'a>(
-    identity_aliases: &'a BTreeMap<String, String>,
-    test_name: &'a str,
-) -> &'a str {
-    let mut current = test_name;
-    while let Some(next) = identity_aliases.get(current) {
-        current = next;
+fn expand_identity_names(names: &mut BTreeSet<String>, status: &StatusFile) {
+    loop {
+        let old_names = status
+            .renames
+            .iter()
+            .filter(|(new_name, _)| names.contains(*new_name))
+            .map(|(_, old_name)| old_name.clone())
+            .collect::<Vec<_>>();
+        let previous_len = names.len();
+        names.extend(old_names);
+        if names.len() == previous_len {
+            break;
+        }
     }
-    current
 }
 
 fn is_gatekeeper(test_name: &str) -> bool {
