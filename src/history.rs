@@ -2,13 +2,22 @@
 
 use crate::ratchet::GATEKEEPER_TEST_NAME;
 use crate::status::{StatusFile, TestState};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub enum HistoryViolation {
     /// A test appeared as passing without ever being pending.
     SkippedPending { test: String, commit: String },
+    /// A committed ledger rewrote an earned passing state back to pending.
+    StateRewritten {
+        test: String,
+        commit: String,
+        from: TestState,
+        to: TestState,
+    },
+    /// A commit descended from the adoption snapshot without the ledger.
+    LedgerDeleted { commit: String },
 }
 
 /// A snapshot of the status file at a specific commit.
@@ -21,7 +30,8 @@ pub struct HistorySnapshot {
 /// Collect status file snapshots from git history.
 ///
 /// Returns snapshots from oldest to newest for every commit that contains a
-/// committed .test-status.json. The first snapshot is the implicit baseline.
+/// committed .test-status.json. The first snapshot is the sole adoption
+/// snapshot; every later snapshot is validated against the complete record.
 pub fn collect_history_snapshots(repo_path: &Path) -> Result<Vec<HistorySnapshot>, git2::Error> {
     let repo = git2::Repository::open(repo_path)?;
 
@@ -51,172 +61,49 @@ pub fn read_head_status(repo_path: &Path) -> Result<Option<StatusFile>, git2::Er
     status_file_at_commit(&repo, head.id())
 }
 
-/// A violation of the immutable adoption baseline.
-#[derive(Debug, Clone)]
-pub enum BaselineViolation {
-    /// HEAD's adoption baseline points at a commit whose own baseline differs —
-    /// the immutable adoption baseline was moved.
-    Moved {
-        head_baseline: String,
-        pointed_at_baseline: String,
-    },
-}
-
-/// Two-commit immutability check (Max's exact mechanism). Read HEAD's baseline
-/// field B; read the baseline field of the commit B points at; if both exist
-/// and differ, report a violation. Bootstrap (any missing piece) = pass.
-///
-/// This is a lightweight tripwire on an *already-established* baseline link. It
-/// does not detect a forward move from a baseline-less commit, and it cannot
-/// distinguish genuine bootstrap from a typo'd/garbage baseline SHA — all pass.
-pub fn check_adoption_baseline(repo_path: &Path) -> Result<Option<BaselineViolation>, git2::Error> {
-    let repo = git2::Repository::open(repo_path)?;
-    let head = repo.head()?.peel_to_commit()?;
-
-    // B = HEAD's baseline.
-    let Some(head_sf) = status_file_at_commit(&repo, head.id())? else {
-        return Ok(None);
-    };
-    let Some(b) = head_sf.baseline.clone() else {
-        return Ok(None);
-    };
-
-    // Resolve B to a commit; bail (pass) if it doesn't resolve.
-    let Ok(oid) = git2::Oid::from_str(&b) else {
-        return Ok(None);
-    };
-    if repo.find_commit(oid).is_err() {
-        return Ok(None);
-    }
-
-    // B' = baseline of the commit B points at.
-    let Some(pointed_sf) = status_file_at_commit(&repo, oid)? else {
-        return Ok(None);
-    };
-    let Some(b_prime) = pointed_sf.baseline.clone() else {
-        return Ok(None);
-    };
-
-    if b != b_prime {
-        return Ok(Some(BaselineViolation::Moved {
-            head_baseline: b,
-            pointed_at_baseline: b_prime,
-        }));
-    }
-    Ok(None)
-}
-
 /// Check history snapshots for TDD violations. Pure function — no IO.
 ///
-/// Verifies that every test that appears as "passing" had a prior
-/// appearance as "pending". The gatekeeper test is always exempt.
-///
-/// `adoption_snapshot_idx` is the index (into the oldest→newest `snapshots`
-/// list) of the adoption snapshot: the first status snapshot at or after the
-/// point the project began enforcing the ratchet. Tests whose first appearance
-/// is at or before that index are trusted (the one sanctioned bootstrap window);
-/// every test first appearing as "passing" after it must earn red→green.
-///
-/// In the bootstrap / pre-adoption case (no resolvable baseline), the caller
-/// passes `0`, so the first snapshot is the adoption snapshot — reproducing the
-/// old first-snapshot trust behavior exactly.
-pub fn check_history_snapshots(
-    snapshots: &[HistorySnapshot],
-    adoption_snapshot_idx: usize,
-) -> Vec<HistoryViolation> {
-    let mut first_seen = BTreeMap::new();
+/// The first committed snapshot is trusted adoption. After it, every test that
+/// first appears passing is a violation, passing can never be rewritten to
+/// pending, and violations remain visible even if a later snapshot removes the
+/// offending test. The gatekeeper is exempt from the first-appearance rule.
+pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViolation> {
+    let mut states = BTreeMap::new();
     let mut identity_aliases = BTreeMap::new();
     let mut violations = Vec::new();
-    let active_identities = active_history_identities(snapshots);
 
     for (idx, snapshot) in snapshots.iter().enumerate() {
         record_history_renames(&mut identity_aliases, &snapshot.status);
 
         for (test_name, state) in &snapshot.status.tests {
-            let identity_name = resolve_history_identity(&identity_aliases, test_name);
+            let identity_name = resolve_history_identity(&identity_aliases, test_name).to_string();
 
-            if !active_identities.contains(identity_name) {
-                continue;
+            match states.get(&identity_name).copied() {
+                None if idx > 0
+                    && *state == TestState::Passing
+                    && !is_gatekeeper(&identity_name) =>
+                {
+                    violations.push(HistoryViolation::SkippedPending {
+                        test: test_name.clone(),
+                        commit: snapshot.commit.clone(),
+                    });
+                }
+                Some(TestState::Passing) if *state == TestState::Pending => {
+                    violations.push(HistoryViolation::StateRewritten {
+                        test: test_name.clone(),
+                        commit: snapshot.commit.clone(),
+                        from: TestState::Passing,
+                        to: TestState::Pending,
+                    });
+                }
+                _ => {}
             }
 
-            if !mark_first_appearance(&mut first_seen, identity_name) {
-                continue;
-            }
-
-            if *state != TestState::Passing {
-                continue;
-            }
-
-            if !is_grandfathered(identity_name, idx, adoption_snapshot_idx) {
-                violations.push(HistoryViolation::SkippedPending {
-                    test: test_name.clone(),
-                    commit: snapshot.commit.clone(),
-                });
-            }
+            states.insert(identity_name, *state);
         }
     }
 
     violations
-}
-
-/// Resolve the adoption-snapshot index from the latest snapshot's `baseline`
-/// field. Returns `0` (bootstrap) when there is no baseline, or when the
-/// baseline SHA does not resolve to a commit / has no snapshot at-or-before it.
-///
-/// When the baseline resolves, the adoption snapshot is the first status
-/// snapshot strictly after the newest snapshot whose commit is an
-/// ancestor-or-equal of the baseline SHA.
-pub fn adoption_snapshot_index(
-    repo_path: &Path,
-    snapshots: &[HistorySnapshot],
-) -> Result<usize, git2::Error> {
-    let Some(baseline) = snapshots.last().and_then(|s| s.status.baseline.clone()) else {
-        return Ok(0);
-    };
-
-    let repo = git2::Repository::open(repo_path)?;
-    let Ok(baseline_oid) = git2::Oid::from_str(&baseline) else {
-        return Ok(0);
-    };
-    if repo.find_commit(baseline_oid).is_err() {
-        return Ok(0);
-    }
-
-    // b_idx = newest snapshot whose commit is an ancestor-or-equal of baseline.
-    let mut b_idx = None;
-    for (idx, snapshot) in snapshots.iter().enumerate() {
-        let Ok(oid) = git2::Oid::from_str(&snapshot.commit) else {
-            continue;
-        };
-        let is_ancestor_or_equal =
-            oid == baseline_oid || repo.graph_descendant_of(baseline_oid, oid).unwrap_or(false);
-        if is_ancestor_or_equal {
-            b_idx = Some(idx);
-        }
-    }
-
-    match b_idx {
-        Some(b) => Ok(b + 1),
-        None => Ok(0),
-    }
-}
-
-fn active_history_identities(snapshots: &[HistorySnapshot]) -> BTreeSet<String> {
-    let Some(latest_snapshot) = snapshots.last() else {
-        return BTreeSet::new();
-    };
-
-    let mut final_aliases = BTreeMap::new();
-    for snapshot in snapshots {
-        record_history_renames(&mut final_aliases, &snapshot.status);
-    }
-
-    latest_snapshot
-        .status
-        .tests
-        .keys()
-        .map(|test_name| resolve_history_identity(&final_aliases, test_name).to_string())
-        .collect()
 }
 
 fn record_history_renames(identity_aliases: &mut BTreeMap<String, String>, status: &StatusFile) {
@@ -237,28 +124,44 @@ fn resolve_history_identity<'a>(
     current
 }
 
-fn mark_first_appearance(first_seen: &mut BTreeMap<String, ()>, test_name: &str) -> bool {
-    first_seen.insert(test_name.to_string(), ()).is_none()
-}
-
-fn is_grandfathered(
-    test_name: &str,
-    first_appearance_idx: usize,
-    adoption_snapshot_idx: usize,
-) -> bool {
-    is_gatekeeper(test_name) || first_appearance_idx <= adoption_snapshot_idx
-}
-
 fn is_gatekeeper(test_name: &str) -> bool {
     test_name.ends_with(GATEKEEPER_TEST_NAME)
 }
 
 /// Convenience: collect snapshots and check them in one call.
-/// Resolves the adoption snapshot from the latest snapshot's baseline field.
 pub fn check_history(repo_path: &Path) -> Result<Vec<HistoryViolation>, git2::Error> {
     let snapshots = collect_history_snapshots(repo_path)?;
-    let adoption_idx = adoption_snapshot_index(repo_path, &snapshots)?;
-    Ok(check_history_snapshots(&snapshots, adoption_idx))
+    let mut violations = check_history_snapshots(&snapshots);
+    violations.extend(check_ledger_continuity(repo_path, &snapshots)?);
+    Ok(violations)
+}
+
+fn check_ledger_continuity(
+    repo_path: &Path,
+    snapshots: &[HistorySnapshot],
+) -> Result<Vec<HistoryViolation>, git2::Error> {
+    let Some(adoption) = snapshots.first() else {
+        return Ok(Vec::new());
+    };
+
+    let repo = git2::Repository::open(repo_path)?;
+    let adoption_oid = git2::Oid::from_str(&adoption.commit)?;
+    let mut violations = Vec::new();
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push_head()?;
+
+    for oid_result in revwalk {
+        let oid = oid_result?;
+        let is_adoption_descendant =
+            oid == adoption_oid || repo.graph_descendant_of(oid, adoption_oid)?;
+        if is_adoption_descendant && status_file_at_commit(&repo, oid)?.is_none() {
+            violations.push(HistoryViolation::LedgerDeleted {
+                commit: oid.to_string(),
+            });
+        }
+    }
+
+    Ok(violations)
 }
 
 /// Read .test-status.json from a specific commit's tree.

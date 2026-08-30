@@ -56,13 +56,6 @@ pub struct StatusFile {
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     schema: Option<String>,
 
-    /// Immutable adoption baseline. The commit at which this project began
-    /// enforcing the ratchet. Once set, it must never change (see the
-    /// two-commit immutability check). Absent on projects that adopted before
-    /// this field existed, and on fresh projects until they deliberately set it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub baseline: Option<String>,
-
     pub tests: BTreeMap<String, TestState>,
 
     /// Non-test checks (e.g. clippy/fmt) tracked alongside tests. Carried
@@ -106,8 +99,6 @@ impl HistoricalTestEntry {
 struct HistoricalStatusFile {
     #[serde(rename = "$schema", default)]
     schema: Option<String>,
-    #[serde(default)]
-    baseline: Option<String>,
     tests: BTreeMap<String, HistoricalTestEntry>,
     #[serde(default)]
     renames: BTreeMap<String, String>,
@@ -125,7 +116,6 @@ impl StatusFile {
     pub fn from_parts(status: TrackedStatus, instructions: WorkingTreeInstructions) -> Self {
         StatusFile {
             schema: None,
-            baseline: None,
             tests: status.tests,
             checks: BTreeMap::new(),
             renames: instructions.renames,
@@ -202,7 +192,6 @@ impl StatusFile {
 
         Ok(StatusFile {
             schema: historical.schema,
-            baseline: historical.baseline,
             tests: historical
                 .tests
                 .into_iter()

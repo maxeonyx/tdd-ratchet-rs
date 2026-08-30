@@ -1093,45 +1093,6 @@ fn new_name() {
 }
 
 #[test]
-fn ratchet_run_preserves_existing_top_level_baseline() {
-    // A committed adoption baseline must survive a ratchet run: the run reads
-    // HEAD, evaluates, and writes the status file back, and the baseline must
-    // still be there afterwards (otherwise the dogfood self-destructs).
-    let dir = TestDir::new();
-    create_test_project(dir.path());
-    add_gatekeeper(dir.path());
-
-    // Establish a committed status file via init + commit.
-    let (ok, out) = run_ratchet_init(dir.path());
-    assert!(ok, "init should succeed: {out}");
-    git_add_commit(dir.path(), "Adopt tdd-ratchet");
-
-    // Hand-set a top-level baseline in the committed status file. Any 40-hex
-    // SHA resolves to nothing in this tiny repo → bootstrap for the two-commit
-    // check, but the field itself must be preserved verbatim across runs.
-    let baseline = "0123456789abcdef0123456789abcdef01234567";
-    let status_path = dir.path().join(".test-status.json");
-    let mut status: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
-    status["baseline"] = serde_json::Value::String(baseline.to_string());
-    fs::write(&status_path, serde_json::to_string_pretty(&status).unwrap()).unwrap();
-    git_add_commit(dir.path(), "Set adoption baseline");
-
-    // Run the ratchet; it rewrites the working-tree status file.
-    let (ok, out) = run_ratchet(dir.path());
-    assert!(ok, "Ratchet run should succeed: {out}");
-
-    let written = fs::read_to_string(&status_path).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&written).unwrap();
-    assert_eq!(
-        parsed["baseline"].as_str(),
-        Some(baseline),
-        "Top-level baseline must survive a ratchet run: {written}"
-    );
-    dir.pass();
-}
-
-#[test]
 fn full_setup_and_tdd_workflow_from_scratch() {
     // Simulate the complete user journey, starting from the README.
     // At every step, the user is guided by tdd-ratchet's error messages.

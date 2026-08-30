@@ -1,7 +1,6 @@
 // Core ratchet logic: compare status file against test results, produce violations.
 
-use crate::history::check_history_snapshots;
-use crate::history::{HistorySnapshot, HistoryViolation};
+use crate::history::HistoryViolation;
 use crate::runner::{TestOutcome, TestResult};
 use crate::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 use std::collections::{BTreeMap, BTreeSet};
@@ -62,11 +61,15 @@ pub enum Violation {
     RemovalTestStillPresent { test: String },
     /// Removal declared for a test that also participates in a rename
     RemovalConflictsWithRename { test: String },
-    /// HEAD's adoption baseline points at a commit whose own baseline differs
-    AdoptionBaselineMoved {
-        head_baseline: String,
-        pointed_at_baseline: String,
+    /// A committed ledger rewrote an earned passing state back to pending.
+    StatusStateRewritten {
+        test: String,
+        commit: String,
+        from: TestState,
+        to: TestState,
     },
+    /// A commit after adoption deleted the status ledger.
+    StatusLedgerDeleted { commit: String },
 }
 
 #[derive(Debug, Clone)]
@@ -98,8 +101,7 @@ pub fn evaluate(
     status: &TrackedStatus,
     instructions: &WorkingTreeInstructions,
     results: &[TestResult],
-    history_snapshots: &[HistorySnapshot],
-    adoption_snapshot_idx: usize,
+    history_violations: &[HistoryViolation],
 ) -> EvalResult {
     let mut violations = Vec::new();
     let mut warnings = Vec::new();
@@ -129,11 +131,31 @@ pub fn evaluate(
     );
 
     // 3. Check git history
-    let history_violations = check_history_snapshots(history_snapshots, adoption_snapshot_idx);
     for hv in history_violations {
         match hv {
             HistoryViolation::SkippedPending { test, commit } => {
-                violations.push(Violation::SkippedPending { test, commit });
+                violations.push(Violation::SkippedPending {
+                    test: test.clone(),
+                    commit: commit.clone(),
+                });
+            }
+            HistoryViolation::StateRewritten {
+                test,
+                commit,
+                from,
+                to,
+            } => {
+                violations.push(Violation::StatusStateRewritten {
+                    test: test.clone(),
+                    commit: commit.clone(),
+                    from: *from,
+                    to: *to,
+                });
+            }
+            HistoryViolation::LedgerDeleted { commit } => {
+                violations.push(Violation::StatusLedgerDeleted {
+                    commit: commit.clone(),
+                });
             }
         }
     }

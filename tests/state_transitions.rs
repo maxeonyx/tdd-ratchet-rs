@@ -205,7 +205,6 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -243,7 +242,6 @@ fn invalid_rename_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -277,7 +275,6 @@ fn declared_removal_of_passing_test_is_accepted_and_removed_from_output() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -313,7 +310,6 @@ fn declared_removal_of_pending_test_is_accepted_and_removed_from_output() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -348,7 +344,6 @@ fn removal_of_unknown_test_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -385,7 +380,6 @@ fn removal_of_test_still_present_in_results_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -425,7 +419,6 @@ fn removal_conflicting_with_rename_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -459,7 +452,6 @@ fn successful_removal_is_transient_in_output() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     let output_json = serde_json::to_string(&outcome.updated).unwrap();

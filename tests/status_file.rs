@@ -191,17 +191,6 @@ fn save_normalizes_simple_entries_as_strings() {
 }
 
 #[test]
-fn top_level_baseline_field_is_accepted() {
-    let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
-    let status: StatusFile =
-        serde_json::from_str(json).expect("top-level baseline should be accepted");
-    assert_eq!(
-        status.baseline.as_deref(),
-        Some("0123456789abcdef0123456789abcdef01234567")
-    );
-}
-
-#[test]
 fn top_level_baseline_field_is_rejected_by_the_current_schema() {
     let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
     let result: Result<StatusFile, _> = serde_json::from_str(json);

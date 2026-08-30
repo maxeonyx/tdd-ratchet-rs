@@ -11,11 +11,6 @@
       "type": "string",
       "description": "Optional JSON Schema reference for editor support."
     },
-    "baseline": {
-      "type": "string",
-      "description": "Immutable adoption baseline: the commit at which this project began enforcing the ratchet. Set once, then never changed.",
-      "pattern": "^[0-9a-f]{40}$"
-    },
     "tests": {
       "type": "object",
       "description": "Map of test names to their expected state. Keys are full nextest names (e.g. 'crate::binary$test_name').",
