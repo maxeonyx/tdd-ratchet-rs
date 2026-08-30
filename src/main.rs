@@ -11,7 +11,7 @@ use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::{TestOutcome, TestResult, nextest_command, parse_nextest_output};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 
-const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using `.test-status.json` plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed `.test-status.json`, enforces the pending→passing workflow, and writes the updated status file back to the working tree.\n\nOptions:\n  --init          Initialize .test-status.json from the current test run\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Initialize from current test state\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n";
+const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n";
 
 struct GatheredRun {
     status: TrackedStatus,
@@ -172,7 +172,7 @@ fn print_actionable_git_error(operation: &str, error: &git2::Error) {
             "tdd-ratchet: not a git repository. tdd-ratchet must be run inside a git repository."
         }
         GitErrorKind::NoCommitsFound => {
-            "tdd-ratchet: no commits found. Run `cargo ratchet --init`, then commit .test-status.json before running again."
+            "tdd-ratchet: no commits found. Commit the project first, then run `cargo ratchet --init` once to create the adoption snapshot before enabling the trusted ledger workflow."
         }
         GitErrorKind::Other => {
             eprintln!("tdd-ratchet: {operation}: {error}");

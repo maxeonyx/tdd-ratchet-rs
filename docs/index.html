@@ -161,7 +161,7 @@
 
     <p>
       <strong>tdd-ratchet</strong> wraps <code>cargo nextest</code> and tracks
-      per-test states in a committed <code>.test-status.json</code>. It enforces
+      per-test states in a trusted <code>.test-status.json</code> ledger. It enforces
       that every new test must fail before it can pass - verified by
       inspecting git history. No shortcuts.
     </p>
@@ -189,14 +189,17 @@
 
     <h2>Workflow</h2>
 <pre class="codeblock-wide"><code><span style="color:var(--comment)"># 1. Write a failing test</span>
-<span style="color:var(--comment)"># 2. Run the ratchet - test added as pending</span>
+<span style="color:var(--comment)"># 2. Run locally, then push the red test</span>
 cargo ratchet
-git add -A && git commit -m "test: describe expected behavior"
+git add tests src && git commit -m "test: describe expected behavior"
+git push
+<span style="color:var(--comment)"># Wait for the trusted workflow to record pending</span>
 
 <span style="color:var(--comment)"># 3. Implement the feature</span>
-<span style="color:var(--comment)"># 4. Run the ratchet - test promoted to passing</span>
+<span style="color:var(--comment)"># 4. Run and push - the workflow records passing</span>
 cargo ratchet
-git add -A && git commit -m "feat: implement the behavior"</code></pre>
+git add src && git commit -m "feat: implement the behavior"
+git push</code></pre>
 
     <h2>Install</h2>
 <pre class="codeblock-wide"><code>cargo install tdd-ratchet</code></pre>
@@ -209,8 +212,9 @@ chmod +x ~/.local/bin/cargo-ratchet</code></pre>
 
     <h2>Status file</h2>
     <p>
-      The <code>.test-status.json</code> file is committed to your repo. It maps
-      full nextest test names to their expected state:
+      The <code>.test-status.json</code> file is committed to your repo by the
+      trusted ledger workflow. Developers do not hand-edit it. It maps full
+      nextest test names to their expected state:
     </p>
 <pre><code>{
   "$schema": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
@@ -223,12 +227,18 @@ chmod +x ~/.local/bin/cargo-ratchet</code></pre>
       <a href="/schema/test-status.v1.json">JSON Schema</a> -
       add <code>"$schema"</code> to your status file for editor validation.
     </p>
+    <p>
+      Put deliberate <code>renames</code> or <code>removals</code> in
+      <code>.tdd-ratchet.json</code>. The workflow validates those instructions
+      before its isolated writer records the resulting ledger.
+    </p>
 
     <h2>How it enforces TDD</h2>
     <p>The ratchet checks three things on every run:</p>
     <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
       <li><strong>State transitions</strong> - new tests must fail, passing tests must stay passing, tracked tests must be present.</li>
-      <li><strong>Git history</strong> - walks commits since a baseline to verify every test appeared as <code>pending</code> before <code>passing</code>. No test can skip the failing step.</li>
+      <li><strong>Git history</strong> - walks every ledger snapshot after the repository's first adoption snapshot to verify every new test appeared as <code>pending</code> before <code>passing</code>. No test can skip the failing step.</li>
+      <li><strong>Trusted writer</strong> - validates pull-request code without a write token, then gives a separate job permission to commit only the validated ledger.</li>
       <li><strong>Bypass prevention</strong> - a gatekeeper test ensures <code>cargo test</code> run directly (outside the ratchet) fails with instructions.</li>
     </ol>
 

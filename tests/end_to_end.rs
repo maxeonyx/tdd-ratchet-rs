@@ -372,9 +372,9 @@ fn running_in_repo_without_commits_shows_init_guidance() {
     let (ok, out) = run_ratchet(dir.path());
     assert!(!ok, "run without commits should fail: {out}");
     assert!(
-        out.contains(
-            "tdd-ratchet: no commits found. Run `cargo ratchet --init`, then commit .test-status.json before running again."
-        ),
+        out.contains("Commit the project first")
+            && out.contains("run `cargo ratchet --init` once")
+            && out.contains("trusted ledger workflow"),
         "primary error should explain the unborn-branch workflow: {out}"
     );
     assert!(

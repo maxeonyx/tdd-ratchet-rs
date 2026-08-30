@@ -19,11 +19,11 @@
 
 ### New user stories
 
-12. ~~As a user of tdd-ratchet, I want to rename tests without the ratchet treating the new name as a brand-new test. A `renames` section in `.test-status.json` declares `old_name → new_name` mappings. The ratchet validates that the old name existed and the new name appears in test results, then transfers the state. After the rename commit, the ratchet warns that the renames section can be removed. If stale renames are left for more than one commit, the ratchet should warn (not error).~~ ✅
+12. ~~As a user of tdd-ratchet, I want to rename tests without the ratchet treating the new name as a brand-new test. A `renames` section in `.tdd-ratchet.json` declares `old_name → new_name` mappings. The ratchet validates that the old name existed and the new name appears in test results, then transfers the state and records the bridge in the generated ledger.~~ ✅
 13. ~~As a user of tdd-ratchet, I want the status file in my working tree to be _output only_ — the ratchet reads its input from the last committed `.test-status.json` in git history (or the earliest commit containing it), not from the working tree. This prevents bypassing the ratchet by manually editing the status file. The baseline concept may be simplified or eliminated — if the ratchet walks back to the first commit that contains `.test-status.json`, that _is_ the baseline.~~ ✅
 14. ~~As a user of tdd-ratchet, I want the ratchet output to be self-documenting. When a violation occurs, it should explain: (a) why the ratchet exists (enforcing test-first discipline), (b) what the specific violation is, (c) what to do about it (e.g. rebase tests and implementation into separate commits). A first-time user encountering the ratchet should understand it without reading external docs.~~ ✅
 
-15. ~~As a user of tdd-ratchet, I want to intentionally remove tests without the ratchet blocking me. A `removals` list in the working-tree `.test-status.json` declares test names to retire. The ratchet validates each removal (name exists in committed status, test is absent from current results, no conflict with renames), removes the entry from the output status file, and rejects undeclared disappearances as before. Unlike `renames`, `removals` is transient — it's read from the working tree as an instruction for the current run and not persisted in the ratchet-generated output. Both `pending` and `passing` tests can be removed.~~ ✅
+15. ~~As a user of tdd-ratchet, I want to intentionally remove tests without the ratchet blocking me. A `removals` list in `.tdd-ratchet.json` declares test names to retire. The ratchet validates each removal, removes the entry from generated ledger output, and rejects undeclared disappearances as before.~~ ✅
 
 ### Developer stories
 
@@ -57,28 +57,12 @@ Each transition requires a separate commit. Verified by git history. Intentional
 }
 ```
 
-With renames (story 12) — temporary section, valid for one commit:
+Developer instructions live separately in `.tdd-ratchet.json`:
 
 ```json
 {
-  "tests": {
-    "test_module::new_name": "passing",
-    "test_module::another_test": "pending"
-  },
   "renames": {
     "test_module::new_name": "test_module::old_name"
-  }
-}
-```
-
-The `renames` section maps new name → old name. After the rename commit, the ratchet warns that the section can be removed.
-
-With removals (story 15) — temporary section, valid for one run:
-
-```json
-{
-  "tests": {
-    "test_module::other_test": "passing"
   },
   "removals": [
     "test_module::retired_test"
@@ -86,7 +70,7 @@ With removals (story 15) — temporary section, valid for one run:
 }
 ```
 
-The `removals` section lists tests to retire. Unlike `renames`, it is transient — read from the working tree and not persisted in the output.
+The `renames` mapping bridges new name → old name and is copied into successful ledger output as historical evidence. The `removals` list is transient and never enters the ledger. Remove consumed instructions after the trusted workflow records the result.
 
 ## Ratchet Algorithm
 
@@ -101,7 +85,7 @@ The `removals` section lists tests to retire. Unlike `renames`, it is transient 
    - `passing` test that now fails → **reject** (regression)
    - Test in status file but not in run → **reject** (silent removal), unless declared in `removals` (story 15)
 4. Inspect git history to verify no test skipped the `pending` state
-5. Update `.test-status.json`
+5. Write a local `.test-status.json` preview; on pull requests, the isolated trusted writer validates and commits it
 6. Exit 0 if all rules pass, non-zero otherwise
 
 ## Design Decisions
@@ -110,15 +94,11 @@ The `removals` section lists tests to retire. Unlike `renames`, it is transient 
 
 The ratchet needs per-test pass/fail results. `cargo test` verbose output prints `test name ... ok/FAILED` — parse with regex. `cargo nextest` has structured output which may be easier. Support both, detect which is available.
 
-### Git history and the adoption baseline
+### Git history and trusted adoption
 
-There is no grandfathering. Every test earns its place by failing before it passes: the history walk requires each active test that appears as `passing` to have had a prior `pending` appearance.
+The first committed `.test-status.json` is the repository's one adoption snapshot. Tests already present there are trusted; every later test must appear as `pending` before `passing`. There is no movable baseline field and no second adoption. Deleting the ledger, recreating it, rewriting `passing` to `pending`, or removing an old violation does not repair history; only rewriting the offending commits does.
 
-The one sanctioned exception is the **adoption baseline** — a single immutable commit recorded in the top-level `baseline` field of `.test-status.json`. It names the last commit before the project began enforcing the ratchet. The first status snapshot at or after that commit is the _adoption snapshot_: everything in it (and before it) is trusted as "the suite as it stood at adoption"; every test first appearing as `passing` after the adoption snapshot must earn red→green. A project with no `baseline` is in bootstrap, where the first status snapshot is the adoption snapshot — reproducing the original first-snapshot trust.
-
-The baseline is meant to stay fixed once set. A lightweight two-commit check guards it: read HEAD's baseline `B`, read the baseline of the commit `B` points at; if both exist and differ, the baseline was moved. This is a tripwire on an already-established baseline link, not a tamper-proof guarantee — a baseline pointed at a baseline-less commit is bootstrap, so the check intentionally does not catch establishing a new forward link.
-
-The ratchet reads tracked test states from the committed version in `HEAD` (and further back for history validation), and re-injects the committed baseline into the written output each run so it survives. The deliberate exception is story 12: working-tree `renames` are an instruction channel for the current run, then are saved into the rename commit so history can see the identity bridge. This still prevents bypassing the ratchet by manually editing tracked test states in the working tree.
+The ratchet reads tracked state from committed history and writes a local preview. On pull requests, an unprivileged validation job runs the ratchet and uploads only that preview. A separate writer job, without a source checkout, validates the artifact and commits exactly `.test-status.json`. Ordinary pull-request commits that touch the ledger are rejected. Developer rename and removal intent comes from `.tdd-ratchet.json`.
 
 ### Bypass prevention discussion
 
@@ -131,7 +111,6 @@ The gatekeeper approach is the known-good option. The ratchet should check that 
 
 ## Future Work
 
-- **Make history rewrite the ONLY way to fix a ratchet violation.** Today the baseline tripwire (see "Git history and the adoption baseline") intentionally does not catch establishing a new forward baseline link: pointing the baseline at a baseline-less commit is treated as bootstrap, so an agent can "fix" a violation by re-adopting / moving the baseline forward onto a fresh anchor instead of rewriting the offending history. That is the wrong fix and the tool currently permits it. The ratchet should reject every escape hatch — moving the baseline, re-`--init`, fresh adoption anchors that grandfather a new passing test — so the only sanctioned response to a violation is rewriting history so the test genuinely goes `pending` → `passing`. The single adoption baseline is allowed ONCE per repo (first adoption); after that, any attempt to re-baseline or forward-move must fail loudly with a message pointing at the history-rewrite procedure. This is the enforcement that would have prevented the trunc/agent-harness re-adoptions during the v1.0.0 rollout.
 - Host a formal JSON Schema for `.test-status.json` on GitHub Pages at `tdd-ratchet.maxeonyx.com`
 - Switch from `cargo test` stdout regex parsing to `cargo nextest` structured output (JUnit XML or libtest JSON). Nextest can be required — no need to support both. This would replace `src/runner.rs` entirely.
 - Continue refining the three-phase architecture (Gather → Logic → Output) introduced during story 13. The gather phase now reads committed status from git and the logic phase applies ratchet rules, but history checking is still partially separate. Fully unifying ratchet rules and history rules into a single pure logic phase would be the next structural improvement.

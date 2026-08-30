@@ -202,7 +202,7 @@ fn format_tdd_violations(violations: &[&Violation]) -> ReportSection {
             "It checks git history because a test must fail before it is allowed to pass, so the test describes the desired behavior before the implementation exists.",
         ),
         problem: "One or more tests violated the failing-first rule: tdd-ratchet could not find a commit where the test was failing before a later commit made it pass.".into(),
-        fix: "Always commit `.test-status.json` whenever tdd-ratchet changes it. Write the failing test, run `cargo ratchet`, and commit the test code together with `.test-status.json` showing that test as `pending`. Then write the implementation, run `cargo ratchet` again, and commit the implementation together with `.test-status.json` showing that test as `passing`. If the behavior already works, temporarily break the implementation, run the test, and commit the test as `pending`; then restore the implementation, rerun the ratchet, and commit the promotion to `passing`. If history is already wrong, rebase so the commits follow that sequence.".into(),
+        fix: "Do not hand-edit `.test-status.json`; the trusted ledger workflow writes it. Write the failing test, run `cargo ratchet`, commit and push the test code, then wait for the workflow's bot commit to record it as `pending`. Only then write the implementation, rerun the ratchet, and push the implementation so the workflow can record `passing`. If the behavior already works, temporarily break the implementation, push the test while it is failing, and wait for the `pending` bot commit; then restore the implementation and push the green change. If history is already wrong, rebase so the commits follow that sequence.".into(),
         details,
         extra: None,
     }
@@ -227,7 +227,7 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
             "It relies on `.test-status.json` as the committed record of which tests define the project's expected behavior, so missing tests could hide deleted coverage or an undeclared rename.",
         ),
         problem: format!("{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."),
-        fix: "Check whether the test was accidentally deleted, skipped, or renamed. If you removed it intentionally, add its tracked name to the working-tree `removals` list in `.test-status.json`, run `cargo ratchet`, and commit the test removal together with the updated `.test-status.json`. If it was renamed, add a valid `renames` entry so tdd-ratchet can bridge the committed old name to the observed new name, then commit the rename together with the `.test-status.json` update. Otherwise restore the missing test so the committed behavior is still exercised.".into(),
+        fix: "Check whether the test was accidentally deleted, skipped, or renamed. If you removed it intentionally, add its tracked name to the `removals` list in `.tdd-ratchet.json`, run `cargo ratchet`, and push the test removal with that instruction so the trusted workflow can update the ledger. If it was renamed, add a valid `renames` entry to `.tdd-ratchet.json` so tdd-ratchet can bridge the committed old name to the observed new name, then push the rename and instruction together. Otherwise restore the missing test so the committed behavior is still exercised.".into(),
         details,
         extra: None,
     }
@@ -262,7 +262,7 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
             "When a test is renamed, it needs a valid identity bridge so the existing test history is preserved instead of looking like one test disappeared and a different one appeared.",
         ),
         problem: "A rename instruction is invalid, so tdd-ratchet cannot safely connect the committed test history to the currently observed test name.".into(),
-        fix: "To fix it, correct the `renames` entry so it bridges one committed old name to one observed new name, remove any stale or conflicting mappings, and commit the rename together with the `.test-status.json` update.".into(),
+        fix: "To fix it, correct the `renames` entry in `.tdd-ratchet.json` so it bridges one committed old name to one observed new name, remove any stale or conflicting mappings, and push the instruction with the renamed test so the trusted workflow can update the ledger.".into(),
         details,
         extra: None,
     }
@@ -291,7 +291,7 @@ fn format_removal_violations(removal_violations: &[&Violation]) -> ReportSection
             "Intentional test retirement must be explicit, because silently dropping a tracked test would weaken the suite without recording that decision.",
         ),
         problem: "A `removals` instruction is invalid, so tdd-ratchet cannot safely retire the tracked test from the committed behavior set.".into(),
-        fix: "Use `removals` only for tests that are currently tracked in committed status, are absent from the current test run, and are not also involved in a rename. Then run `cargo ratchet` and commit the test removal together with the updated `.test-status.json`.".into(),
+        fix: "Use `removals` in `.tdd-ratchet.json` only for tests that are currently tracked in committed status, are absent from the current test run, and are not also involved in a rename. Then run `cargo ratchet` and push the test removal with that instruction so the trusted workflow can update the ledger.".into(),
         details,
         extra: None,
     }
@@ -367,7 +367,7 @@ fn format_regressions(violations: &[&Violation]) -> ReportSection {
             "Once a test is accepted as passing, later failures mean the protected behavior regressed and the suite is no longer keeping that promise.",
         ),
         problem: format!("{count} tracked passing {test_word} was previously tracked as passing but is now failing in the current run."),
-        fix: "Fix the failing test, or if the change is intentional, run `cargo ratchet` and commit the code change together with the updated `.test-status.json`. Always commit `.test-status.json` whenever tdd-ratchet changes it.".into(),
+        fix: "Restore the passing behavior and rerun `cargo ratchet`. Do not downgrade or hand-edit `.test-status.json`; if the old test is intentionally obsolete, use a rename or removal instruction in `.tdd-ratchet.json` and let the trusted workflow record the result.".into(),
         details,
         extra: None,
     }
@@ -384,11 +384,11 @@ fn format_warnings(warnings: &[Warning]) -> String {
             "Temporary rename mappings are only meant to bridge one rename commit, so the report also teaches you when that temporary bookkeeping can be removed.",
         ),
         problem: if warnings.len() == 1 {
-            "A temporary rename mapping no longer needs to stay in `.test-status.json`.".into()
+            "A temporary rename mapping no longer needs to stay in `.tdd-ratchet.json`.".into()
         } else {
-            "Temporary rename mappings no longer need to stay in `.test-status.json`.".into()
+            "Temporary rename mappings no longer need to stay in `.tdd-ratchet.json`.".into()
         },
-        fix: "Remove the `renames` entry in your next commit once the rename bridge is no longer needed.".into(),
+        fix: "Remove the `renames` entry from `.tdd-ratchet.json` in your next commit once the trusted workflow has recorded the rename bridge.".into(),
         details: warnings.iter().map(format_warning).collect(),
         extra: None,
     })
