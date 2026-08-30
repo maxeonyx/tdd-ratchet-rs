@@ -1,0 +1,112 @@
+name: Trusted test-status ledger
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the pull-request head without credentials
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Reject ordinary ledger edits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git fetch --no-tags origin "$BASE_SHA"
+          while read -r commit; do
+            changed=$(git diff-tree --no-commit-id --name-only -r "$commit")
+            if grep -qx '.test-status.json' <<<"$changed"; then
+              test "$changed" = '.test-status.json'
+              test "$(gh api "repos/$REPOSITORY/commits/$commit" --jq '.commit.verification.verified')" = true
+              test "$(gh api "repos/$REPOSITORY/commits/$commit" --jq '.committer.login')" = 'github-actions[bot]'
+            fi
+          done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install the trusted ratchet release
+        run: |
+          curl --fail --location --silent --show-error \
+            https://tdd-ratchet.maxeonyx.com/releases/cargo-ratchet-x86_64-linux \
+            --output "$RUNNER_TEMP/cargo-ratchet"
+          chmod +x "$RUNNER_TEMP/cargo-ratchet"
+
+      - name: Produce the proposed ledger
+        run: '"$RUNNER_TEMP/cargo-ratchet"'
+
+      - name: Upload only the proposed ledger
+        uses: actions/upload-artifact@v7
+        with:
+          name: proposed-test-status
+          path: .test-status.json
+          if-no-files-found: error
+
+  write:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Download the ratchet-produced ledger
+        uses: actions/download-artifact@v8
+        with:
+          name: proposed-test-status
+          path: ledger-output
+
+      - name: Validate and commit only the ledger
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          ledger='ledger-output/.test-status.json'
+          test -f "$ledger"
+          test "$(find ledger-output -type f | wc -l)" -eq 1
+          jq -e '
+            (keys - ["\u0024schema", "tests", "checks", "renames"] | length) == 0 and
+            (.tests | type == "object") and
+            (all(.tests[]; . == "pending" or . == "passing")) and
+            (has("removals") | not) and
+            (has("baseline") | not)
+          ' "$ledger" >/dev/null
+
+          current_head=$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json headRefOid --jq .headRefOid)
+          test "$current_head" = "$HEAD_SHA"
+
+          content=$(base64 -w0 "$ledger")
+          existing_sha=$(gh api "repos/$REPOSITORY/contents/.test-status.json?ref=$HEAD_REF" --jq .sha 2>/dev/null || true)
+          if test -n "$existing_sha"; then
+            gh api -X PUT "repos/$REPOSITORY/contents/.test-status.json" \
+              -f branch="$HEAD_REF" \
+              -f content="$content" \
+              -f message='chore: record tdd-ratchet status [skip ci]' \
+              -f sha="$existing_sha" >/dev/null
+          else
+            gh api -X PUT "repos/$REPOSITORY/contents/.test-status.json" \
+              -f branch="$HEAD_REF" \
+              -f content="$content" \
+              -f message='chore: record tdd-ratchet status [skip ci]' >/dev/null
+          fi

@@ -4,7 +4,9 @@ use std::path::Path;
 use std::process::{self, Stdio};
 
 use tdd_ratchet::errors::format_report;
-use tdd_ratchet::history::{HistoryViolation, check_history, read_head_status};
+use tdd_ratchet::history::{
+    HistoryViolation, check_history, collect_history_snapshots, read_head_status,
+};
 use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::{TestOutcome, TestResult, nextest_command, parse_nextest_output};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
@@ -67,6 +69,17 @@ fn init(status_path: &Path, project_dir: &Path) {
     if status_path.exists() {
         eprintln!(
             "tdd-ratchet: .test-status.json already exists; the ledger cannot be re-initialized."
+        );
+        process::exit(1);
+    }
+
+    let prior_snapshots = collect_history_snapshots(project_dir).unwrap_or_else(|e| {
+        print_actionable_git_error("failed to inspect git history before initialization", &e);
+        process::exit(1);
+    });
+    if !prior_snapshots.is_empty() {
+        eprintln!(
+            "tdd-ratchet: this repository already adopted .test-status.json; restore the deleted ledger from history instead of re-initializing it."
         );
         process::exit(1);
     }
