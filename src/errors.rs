@@ -202,7 +202,7 @@ fn format_tdd_violations(violations: &[&Violation]) -> ReportSection {
             "It checks git history because a test must fail before it is allowed to pass, so the test describes the desired behavior before the implementation exists.",
         ),
         problem: "One or more tests violated the failing-first rule: tdd-ratchet could not find a commit where the test was failing before a later commit made it pass.".into(),
-        fix: "Always commit `.test-status.json` whenever tdd-ratchet changes it. Write the failing test, run `cargo ratchet`, and commit the test code together with `.test-status.json` showing that test as `pending`. Then write the implementation, run `cargo ratchet` again, and commit the implementation together with `.test-status.json` showing that test as `passing`. If history is already wrong, rebase so the commits follow that sequence.".into(),
+        fix: "Always commit `.test-status.json` whenever tdd-ratchet changes it. Write the failing test, run `cargo ratchet`, and commit the test code together with `.test-status.json` showing that test as `pending`. Then write the implementation, run `cargo ratchet` again, and commit the implementation together with `.test-status.json` showing that test as `passing`. If the behavior already works, temporarily break the implementation, run the test, and commit the test as `pending`; then restore the implementation, rerun the ratchet, and commit the promotion to `passing`. If history is already wrong, rebase so the commits follow that sequence.".into(),
         details,
         extra: None,
     }

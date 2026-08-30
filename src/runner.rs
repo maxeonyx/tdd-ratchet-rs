@@ -31,6 +31,18 @@ pub fn nextest_command(project_dir: &Path) -> Command {
         .current_dir(project_dir)
         .env("TDD_RATCHET", "1")
         .env("NEXTEST_EXPERIMENTAL_LIBTEST_JSON", "1");
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_PREFIX",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ] {
+        command.env_remove(name);
+    }
     command
 }
 
