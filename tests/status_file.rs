@@ -202,6 +202,16 @@ fn top_level_baseline_field_is_accepted() {
 }
 
 #[test]
+fn top_level_baseline_field_is_rejected_by_the_current_schema() {
+    let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
+    let result: Result<StatusFile, _> = serde_json::from_str(json);
+    assert!(
+        result.is_err(),
+        "The movable baseline escape hatch must not be part of the current schema"
+    );
+}
+
+#[test]
 fn top_level_checks_field_is_accepted() {
     let json = r#"{"tests":{"a":"passing"},"checks":{"cargo_fmt":"passing"}}"#;
     let status: StatusFile = serde_json::from_str(json).expect("checks field should be accepted");

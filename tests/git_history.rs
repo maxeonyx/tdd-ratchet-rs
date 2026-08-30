@@ -141,6 +141,93 @@ fn no_status_file_in_history_is_ok() {
 }
 
 #[test]
+fn status_file_deletion_after_adoption_is_rejected() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Adopt the ledger");
+
+    fs::remove_file(dir.path().join(".test-status.json")).unwrap();
+    commit(dir.path(), "Delete the ledger");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        !violations.is_empty(),
+        "Deleting the ledger after adoption must remain a history violation"
+    );
+    dir.pass();
+}
+
+#[test]
+fn reinitialising_after_deletion_is_not_a_new_adoption() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Adopt the ledger");
+
+    fs::remove_file(dir.path().join(".test-status.json")).unwrap();
+    commit(dir.path(), "Delete the ledger");
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Reinitialise the ledger");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        !violations.is_empty(),
+        "Recreating the same ledger must not hide the intervening deletion"
+    );
+    dir.pass();
+}
+
+#[test]
+fn committed_passing_to_pending_rewrite_is_rejected() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Adopt the ledger");
+
+    write_status(dir.path(), r#"{"tests":{"existing":"pending"}}"#);
+    commit(dir.path(), "Rewrite passing as pending");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        !violations.is_empty(),
+        "Committed passing-to-pending edits must not repair history"
+    );
+    dir.pass();
+}
+
+#[test]
+fn removing_a_skipped_pending_violation_does_not_repair_history() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Adopt the ledger");
+
+    write_status(
+        dir.path(),
+        r#"{"tests":{"existing":"passing","cheater":"passing"}}"#,
+    );
+    commit(dir.path(), "Skip the pending state");
+
+    write_status(dir.path(), r#"{"tests":{"existing":"passing"}}"#);
+    commit(dir.path(), "Try to erase the violation");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        violations.iter().any(
+            |violation| matches!(violation, HistoryViolation::SkippedPending { test, .. } if test == "cheater")
+        ),
+        "A bad committed transition must remain bad until history is rewritten: {violations:?}"
+    );
+    dir.pass();
+}
+
+#[test]
 fn committed_rename_bridges_history_identity() {
     let dir = TestDir::new();
     init_repo(dir.path());
