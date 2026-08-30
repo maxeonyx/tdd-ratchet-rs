@@ -33,6 +33,7 @@
     "tdd-ratchet::git_history$first_committed_snapshot_is_the_only_adoption": "passing",
     "tdd-ratchet::git_history$historical_snapshots_ignore_unknown_top_level_fields": "passing",
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
+    "tdd-ratchet::git_history$pending_on_a_sibling_branch_does_not_authorize_passing": "pending",
     "tdd-ratchet::git_history$reinitialising_after_deletion_is_not_a_new_adoption": "passing",
     "tdd-ratchet::git_history$removed_tests_stop_participating_in_history_checks": "passing",
     "tdd-ratchet::git_history$removing_a_skipped_pending_violation_does_not_repair_history": "passing",

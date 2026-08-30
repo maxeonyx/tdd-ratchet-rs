@@ -9,7 +9,10 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use tdd_ratchet::history::{HistoryViolation, check_history};
+use tdd_ratchet::history::{
+    HistorySnapshot, HistoryViolation, check_history, check_history_snapshots,
+};
+use tdd_ratchet::status::StatusFile;
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -111,6 +114,42 @@ fn test_pending_for_multiple_commits_then_passing_is_ok() {
     let violations = check_history(dir.path()).unwrap();
     assert!(violations.is_empty(), "Should be ok: {violations:?}");
     dir.pass();
+}
+
+#[test]
+fn pending_on_a_sibling_branch_does_not_authorize_passing() {
+    let snapshot = |commit: &str, parents: &[&str], status: &str| HistorySnapshot {
+        commit: commit.to_string(),
+        parents: parents.iter().map(|parent| (*parent).to_string()).collect(),
+        status: serde_json::from_str::<StatusFile>(status).unwrap(),
+    };
+    let snapshots = vec![
+        snapshot("adoption", &[], r#"{"tests":{"existing":"passing"}}"#),
+        snapshot(
+            "red-sibling",
+            &["adoption"],
+            r#"{"tests":{"existing":"passing","shared_test":"pending"}}"#,
+        ),
+        snapshot(
+            "invalid-green",
+            &["adoption"],
+            r#"{"tests":{"existing":"passing","shared_test":"passing"}}"#,
+        ),
+        snapshot(
+            "merge",
+            &["invalid-green", "red-sibling"],
+            r#"{"tests":{"existing":"passing","shared_test":"passing"}}"#,
+        ),
+    ];
+
+    let violations = check_history_snapshots(&snapshots);
+    assert!(
+        violations.iter().any(
+            |violation| matches!(violation, HistoryViolation::SkippedPending { test, commit }
+                if test == "shared_test" && commit == "invalid-green")
+        ),
+        "a pending state must be an ancestor of the passing transition: {violations:?}"
+    );
 }
 
 #[test]
