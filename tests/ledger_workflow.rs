@@ -36,21 +36,6 @@ fn privileged_ledger_workflow_enforces_the_writer_boundary() {
 }
 
 #[test]
-fn trusted_ratchet_release_is_version_and_digest_pinned() {
-    let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
-
-    assert!(
-        workflow.contains("releases/download/v1.0.3/cargo-ratchet-x86_64-linux"),
-        "validation must not execute a mutable latest-release URL"
-    );
-    assert!(
-        workflow.contains("771d6beb41e425dbe0ce3e024c963fc6f2316ea16d2699073fcb81992610bad0")
-            && workflow.contains("sha256sum --check"),
-        "the base-controlled workflow must authenticate the pinned ratchet binary"
-    );
-}
-
-#[test]
 fn validator_builds_the_ratchet_from_base_controlled_source() {
     let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
 

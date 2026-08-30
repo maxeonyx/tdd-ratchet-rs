@@ -1,0 +1,5 @@
+{
+  "removals": [
+    "tdd-ratchet::ledger_workflow$trusted_ratchet_release_is_version_and_digest_pinned"
+  ]
+}

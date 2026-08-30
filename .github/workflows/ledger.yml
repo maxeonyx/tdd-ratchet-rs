@@ -18,11 +18,19 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      - name: Check out the reviewed ratchet source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-ratchet-source
+          persist-credentials: false
+
       - name: Check out the pull-request head without credentials
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          path: pull-request
           persist-credentials: false
 
       - name: Reject ordinary ledger edits
@@ -31,6 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPOSITORY: ${{ github.repository }}
+        working-directory: pull-request
         run: |
           git fetch --no-tags origin "$BASE_SHA"
           while read -r commit; do
@@ -47,23 +56,18 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@nextest
 
-      - name: Install the trusted ratchet release
-        run: |
-          curl --fail --location --silent --show-error \
-            https://github.com/maxeonyx/tdd-ratchet-rs/releases/download/v1.0.3/cargo-ratchet-x86_64-linux \
-            --output "$RUNNER_TEMP/cargo-ratchet"
-          echo '771d6beb41e425dbe0ce3e024c963fc6f2316ea16d2699073fcb81992610bad0  '"$RUNNER_TEMP/cargo-ratchet" \
-            | sha256sum --check
-          chmod +x "$RUNNER_TEMP/cargo-ratchet"
+      - name: Build the base-controlled ratchet
+        run: cargo build --release --manifest-path trusted-ratchet-source/Cargo.toml
 
       - name: Produce the proposed ledger
-        run: '"$RUNNER_TEMP/cargo-ratchet"'
+        working-directory: pull-request
+        run: ../trusted-ratchet-source/target/release/cargo-ratchet
 
       - name: Upload only the proposed ledger
         uses: actions/upload-artifact@v7
         with:
           name: proposed-test-status
-          path: .test-status.json
+          path: pull-request/.test-status.json
           if-no-files-found: error
 
   write:
