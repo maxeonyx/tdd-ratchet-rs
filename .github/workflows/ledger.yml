@@ -6,6 +6,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ledger-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     if: github.actor != 'github-actions[bot]' && github.event.pull_request.head.repo.full_name == github.repository
@@ -46,8 +50,10 @@ jobs:
       - name: Install the trusted ratchet release
         run: |
           curl --fail --location --silent --show-error \
-            https://tdd-ratchet.maxeonyx.com/releases/cargo-ratchet-x86_64-linux \
+            https://github.com/maxeonyx/tdd-ratchet-rs/releases/download/v1.0.3/cargo-ratchet-x86_64-linux \
             --output "$RUNNER_TEMP/cargo-ratchet"
+          echo '771d6beb41e425dbe0ce3e024c963fc6f2316ea16d2699073fcb81992610bad0  '"$RUNNER_TEMP/cargo-ratchet" \
+            | sha256sum --check
           chmod +x "$RUNNER_TEMP/cargo-ratchet"
 
       - name: Produce the proposed ledger
@@ -96,17 +102,79 @@ jobs:
           current_head=$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json headRefOid --jq .headRefOid)
           test "$current_head" = "$HEAD_SHA"
 
-          content=$(base64 -w0 "$ledger")
-          existing_sha=$(gh api "repos/$REPOSITORY/contents/.test-status.json?ref=$HEAD_REF" --jq .sha 2>/dev/null || true)
-          if test -n "$existing_sha"; then
-            gh api -X PUT "repos/$REPOSITORY/contents/.test-status.json" \
-              -f branch="$HEAD_REF" \
-              -f content="$content" \
-              -f message='chore: record tdd-ratchet status [skip ci]' \
-              -f sha="$existing_sha" >/dev/null
-          else
-            gh api -X PUT "repos/$REPOSITORY/contents/.test-status.json" \
-              -f branch="$HEAD_REF" \
-              -f content="$content" \
-              -f message='chore: record tdd-ratchet status [skip ci]' >/dev/null
+          gh api "repos/$REPOSITORY/contents/.test-status.json?ref=$HEAD_SHA" --jq .content \
+            | tr -d '\n' | base64 --decode >previous-ledger.json
+          if ! gh api "repos/$REPOSITORY/contents/.tdd-ratchet.json?ref=$HEAD_SHA" --jq .content \
+            | tr -d '\n' | base64 --decode >instructions.json; then
+            echo '{}' >instructions.json
           fi
+
+          # Re-establish the semantic ledger transition in the privileged job.
+          # The artifact was produced while untrusted pull-request code ran, so
+          # JSON shape alone is not a trust boundary.
+          jq -e --slurpfile previous previous-ledger.json \
+            --slurpfile instructions instructions.json '
+            . as $next
+            | $previous[0] as $old
+            | $instructions[0] as $cfg
+            | ($cfg.renames // {}) as $renames
+            | ($cfg.removals // []) as $removals
+            | def transition_ok($from; $to):
+                ($from == "pending" and ($to == "pending" or $to == "passing"))
+                or ($from == "passing" and $to == "passing");
+              def renamed_to($old_name):
+                [$renames | to_entries[] | select(.value == $old_name) | .key];
+              (($cfg | keys - ["renames", "removals"] | length) == 0)
+            and (($renames | type) == "object")
+            and (($removals | type) == "array")
+            and (($next.renames // {}) == $renames)
+            and all($old.tests | to_entries[];
+              . as $entry
+              | if (($next.tests | has($entry.key)) and
+                    $entry.value == "passing" and
+                    $next.tests[$entry.key] == "pending")
+                then error("passing tests cannot be downgraded")
+                elif ($next.tests | has($entry.key))
+                then transition_ok($entry.value; $next.tests[$entry.key])
+                elif (renamed_to($entry.key) | length) == 1
+                then (renamed_to($entry.key)[0]) as $new_name
+                  | ($next.tests | has($new_name))
+                  and transition_ok($entry.value; $next.tests[$new_name])
+                elif ($removals | index($entry.key)) != null
+                then true
+                else error("removed tests require an instruction")
+                end)
+            and all($next.tests | to_entries[];
+              . as $entry
+              | if ($old.tests | has($entry.key))
+                then transition_ok($old.tests[$entry.key]; $entry.value)
+                elif ($renames | has($entry.key))
+                then ($renames[$entry.key]) as $old_name
+                  | ($old.tests | has($old_name))
+                  and transition_ok($old.tests[$old_name]; $entry.value)
+                elif $entry.value == "pending" or ($entry.key | endswith("tdd_ratchet_gatekeeper"))
+                then true
+                else error("new tests must enter pending")
+                end)
+            and all($removals[];
+              . as $removed
+              | ($old.tests | has($removed))
+              and ($next.tests | has($removed) | not)
+              and ([ $renames[] ] | index($removed) | not))
+          ' "$ledger" >/dev/null
+
+          content=$(base64 -w0 "$ledger")
+          blob_sha=$(gh api -X POST "repos/$REPOSITORY/git/blobs" \
+            -f content="$content" -f encoding=base64 --jq .sha)
+          head_tree=$(gh api "repos/$REPOSITORY/git/commits/$HEAD_SHA" --jq .tree.sha)
+          tree_sha=$(jq -n --arg base "$head_tree" --arg blob "$blob_sha" '{
+            base_tree: $base,
+            tree: [{path: ".test-status.json", mode: "100644", type: "blob", sha: $blob}]
+          }' | gh api -X POST "repos/$REPOSITORY/git/trees" --input - --jq .sha)
+          commit_sha=$(jq -n --arg tree "$tree_sha" --arg head_sha "$HEAD_SHA" '{
+            message: "chore: record tdd-ratchet status [skip ci]",
+            tree: $tree,
+            parents: [$head_sha]
+          }' | gh api -X POST "repos/$REPOSITORY/git/commits" --input - --jq .sha)
+          gh api -X PATCH "repos/$REPOSITORY/git/refs/heads/$HEAD_REF" \
+            -f sha="$commit_sha" -F force=false >/dev/null
