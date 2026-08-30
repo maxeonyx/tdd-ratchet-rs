@@ -228,6 +228,28 @@ fn init_creates_empty_status_file() {
 }
 
 #[test]
+fn init_after_committed_ledger_deletion_is_rejected() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    add_gatekeeper(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "initial adoption should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt tdd-ratchet");
+
+    fs::remove_file(dir.path().join(".test-status.json")).unwrap();
+    git_add_commit(dir.path(), "Delete the ledger");
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(!ok, "reinitialization after deletion must fail: {out}");
+    assert!(
+        out.contains("already adopted") && out.contains("restore"),
+        "failure should explain that history, not a new adoption, is authoritative: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
 fn version_flag_prints_version_without_running_ratchet() {
     let dir = TestDir::new();
     create_test_project(dir.path());

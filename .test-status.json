@@ -1,6 +1,5 @@
 {
   "$schema": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
-  "baseline": "c1c407e4d64bd369e027fc0062c456a8c65a45c3",
   "tests": {
     "tdd-ratchet::bypass_prevention$cargo_test_with_ratchet_env_passes_gatekeeper": "passing",
     "tdd-ratchet::bypass_prevention$cargo_test_without_ratchet_env_fails_with_instructions": "passing",
@@ -9,6 +8,7 @@
     "tdd-ratchet::end_to_end$full_setup_and_tdd_workflow_from_scratch": "passing",
     "tdd-ratchet::end_to_end$happy_path_tdd_workflow": "passing",
     "tdd-ratchet::end_to_end$help_flag_prints_usage_without_running_ratchet": "passing",
+    "tdd-ratchet::end_to_end$init_after_committed_ledger_deletion_is_rejected": "pending",
     "tdd-ratchet::end_to_end$init_creates_empty_status_file": "passing",
     "tdd-ratchet::end_to_end$rejects_bad_git_history_skipped_pending": "passing",
     "tdd-ratchet::end_to_end$rejects_disappeared_test": "passing",
@@ -41,6 +41,7 @@
     "tdd-ratchet::git_history$test_pending_for_multiple_commits_then_passing_is_ok": "passing",
     "tdd-ratchet::git_history$tests_in_adoption_snapshot_are_trusted": "passing",
     "tdd-ratchet::help_examples$help_examples": "passing",
+    "tdd-ratchet::ledger_workflow$privileged_ledger_workflow_enforces_the_writer_boundary": "pending",
     "tdd-ratchet::report_messages$already_working_behavior_guidance_suggests_temporarily_breaking_the_implementation": "passing",
     "tdd-ratchet::report_messages$disappeared_test_report_explains_the_rule_and_removals_workflow": "passing",
     "tdd-ratchet::report_messages$missing_gatekeeper_report_explains_bypass_prevention": "passing",
@@ -98,8 +99,5 @@
     "tdd-ratchet::test_runner$parses_deeply_nested_module_names": "passing",
     "tdd-ratchet::test_runner$parses_mixed_pass_and_fail": "passing",
     "tdd-ratchet::version_json$version_json_flag_prints_machine_readable_version": "passing"
-  },
-  "renames": {
-    "tdd-ratchet::git_history$first_committed_snapshot_is_the_only_adoption": "tdd-ratchet::git_history$bootstrap_no_baseline_trusts_first_snapshot"
   }
 }
