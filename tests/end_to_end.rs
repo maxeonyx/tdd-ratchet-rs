@@ -250,6 +250,50 @@ fn init_after_committed_ledger_deletion_is_rejected() {
 }
 
 #[test]
+fn removal_requests_are_read_from_the_separate_instruction_file() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    add_gatekeeper(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "initial adoption should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt tdd-ratchet");
+
+    set_test_file(
+        dir.path(),
+        "retire_via_instruction.rs",
+        r#"
+#[test]
+fn retire_via_instruction() {
+    panic!("expected red test");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "the failing test should become pending: {out}");
+    git_add_commit(dir.path(), "Record the pending test");
+
+    fs::remove_file(dir.path().join("tests/retire_via_instruction.rs")).unwrap();
+    fs::write(
+        dir.path().join(".tdd-ratchet.json"),
+        r#"{"removals":["test-project::retire_via_instruction$retire_via_instruction"]}"#,
+    )
+    .unwrap();
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(
+        ok,
+        "the separate instruction file should authorize retirement: {out}"
+    );
+    let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        !status.contains("retire_via_instruction$retire_via_instruction"),
+        "retired test should be absent from the generated ledger: {status}"
+    );
+    dir.pass();
+}
+
+#[test]
 fn version_flag_prints_version_without_running_ratchet() {
     let dir = TestDir::new();
     create_test_project(dir.path());

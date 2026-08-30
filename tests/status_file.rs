@@ -208,6 +208,16 @@ fn top_level_checks_field_is_accepted() {
 }
 
 #[test]
+fn committed_status_rejects_transient_removal_instructions() {
+    let json = r#"{"tests":{"a":"passing"},"removals":["a"]}"#;
+    let result: Result<StatusFile, _> = serde_json::from_str(json);
+    assert!(
+        result.is_err(),
+        "developer-owned removal requests must not be accepted as committed ledger state"
+    );
+}
+
+#[test]
 fn status_file_with_renames_loads_and_round_trips() {
     let dir = TestDir::new();
     let path = dir.path().join(".test-status.json");
