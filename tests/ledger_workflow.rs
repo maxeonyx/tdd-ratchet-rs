@@ -51,6 +51,23 @@ fn trusted_ratchet_release_is_version_and_digest_pinned() {
 }
 
 #[test]
+fn validator_builds_the_ratchet_from_base_controlled_source() {
+    let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
+
+    assert!(
+        workflow.contains("ref: ${{ github.event.pull_request.base.sha }}")
+            && workflow.contains("path: trusted-ratchet-source")
+            && workflow.contains("--manifest-path trusted-ratchet-source/Cargo.toml"),
+        "the enforcing binary must be built from reviewed base-branch source"
+    );
+    assert!(
+        workflow.contains("path: pull-request")
+            && workflow.contains("../trusted-ratchet-source/target/release/cargo-ratchet"),
+        "the base-controlled ratchet must execute against a separate pull-request checkout"
+    );
+}
+
+#[test]
 fn writer_semantically_revalidates_untrusted_artifact() {
     let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
 
