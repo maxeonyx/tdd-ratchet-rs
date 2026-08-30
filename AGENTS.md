@@ -1,7 +1,6 @@
 # tdd-ratchet — Agent Guide
 
-This repository is self-contained for development. A standalone clone must
-build, test, and release without an `agent-tools` checkout.
+This repository is self-contained for development. A standalone clone must build, test, and release without an `agent-tools` checkout.
 
 Read [VISION.md](VISION.md) for what tdd-ratchet does and why. Read [PLAN.md](PLAN.md) for stories, state machine, algorithm, and design decisions.
 
@@ -13,17 +12,13 @@ During tdd-ratchet development, use `TDD_RATCHET=1 cargo test` until the binary 
 
 ## Integration workflow
 
-Run `devenv test` before committing and pushing; it includes `actionlint`, so
-workflow syntax is checked offline. Source CI does not run on push. Open a pull
-request, merge current `main` into the feature branch, then explicitly dispatch:
+Run `devenv test` before committing and pushing; it includes `actionlint`, so workflow syntax is checked offline. Source CI does not run on push. Open a pull request, merge current `main` into the feature branch, then explicitly dispatch:
 
 ```bash
 gh workflow run ci.yml --ref <feature-branch> -f pr_number=<number>
 ```
 
-The repository-serialized run records the required `Ready` check, builds the
-release artifacts, auto-merges the pull request, publishes those same artifacts,
-and records `integrated-ci` on the exact merge commit.
+The repository-serialized run records the required `Ready` check, builds the release artifacts, auto-merges the pull request, publishes those same artifacts, and records `integrated-ci` on the exact merge commit.
 
 ## Implementation workflow
 
