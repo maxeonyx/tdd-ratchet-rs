@@ -25,7 +25,7 @@
     "tdd-ratchet::error_messages$test_disappeared_error_has_context_problem_suggestion": "passing",
     "tdd-ratchet::gatekeeper$tdd_ratchet_gatekeeper": "passing",
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
-    "tdd-ratchet::git_history$committed_rename_bridges_history_identity": "pending",
+    "tdd-ratchet::git_history$committed_rename_bridges_history_identity": "passing",
     "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {
       "state": "passing",
       "baseline": "afb4c5c66112fb0b49787265f45f4f76634e0bd2"
@@ -43,7 +43,7 @@
     "tdd-ratchet::state_transitions$passing_test_still_passing_is_ok": "passing",
     "tdd-ratchet::state_transitions$pending_test_still_failing_is_ok": "passing",
     "tdd-ratchet::state_transitions$pending_test_that_now_passes_is_promoted": "passing",
-    "tdd-ratchet::state_transitions$invalid_rename_is_reported": "pending",
+    "tdd-ratchet::state_transitions$invalid_rename_is_reported": "passing",
     "tdd-ratchet::state_transitions$renamed_test_is_not_treated_as_new_or_missing": "passing",
     "tdd-ratchet::state_transitions$tracked_test_missing_from_run_is_rejected": "passing",
     "tdd-ratchet::status_file$empty_status_file_parses_to_empty_map": "passing",

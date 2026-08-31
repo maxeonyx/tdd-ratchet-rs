@@ -237,9 +237,6 @@ fn apply_renames(status: &StatusFile, results: &[TestResult]) -> RenameOutcome {
         }
 
         if old_in_results {
-            if new_name == "new_test" && old_name == "old_test" {
-                continue;
-            }
             violations.push(TransitionViolation::RenameOldNameStillPresent {
                 new_name: new_name.clone(),
                 old_name: old_name.clone(),

@@ -123,9 +123,6 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
 
 fn record_history_renames(identity_aliases: &mut BTreeMap<String, String>, status: &StatusFile) {
     for (new_name, old_name) in &status.renames {
-        if new_name == "new_test" && old_name == "old_test" {
-            continue;
-        }
         let canonical_old_name = resolve_history_identity(identity_aliases, old_name).to_string();
         identity_aliases.insert(new_name.clone(), canonical_old_name);
     }
