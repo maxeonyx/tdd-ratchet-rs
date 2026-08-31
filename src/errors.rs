@@ -235,8 +235,8 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
         why: story_14_why(
             "When a test is renamed, it needs a valid identity bridge so the existing test history is preserved instead of looking like one test disappeared and a different one appeared.",
         ),
-        problem: "A rename mapping could not be applied.".into(),
-        fix: "Correct the rename mapping.".into(),
+        problem: "A rename instruction is invalid, so tdd-ratchet cannot safely connect the committed test history to the currently observed test name.".into(),
+        fix: "To fix it, correct the `renames` entry so it bridges one committed old name to one observed new name, and remove any stale or conflicting mappings.".into(),
         details,
         extra: None,
     }
@@ -245,9 +245,11 @@ fn format_rename_violations(rename_violations: &[&Violation]) -> ReportSection {
 fn format_missing_gatekeeper() -> ReportSection {
     ReportSection {
         title: "missing gatekeeper test".into(),
-        why: story_14_why("The ratchet expects a gatekeeper test."),
+        why: story_14_why(
+            "It only works when tests are run through the ratchet, and without it, someone can run `cargo test` directly and bypass the ratchet.",
+        ),
         problem: format!("no test named `{GATEKEEPER_TEST_NAME}` was found in the current run."),
-        fix: "Add the gatekeeper test below.".into(),
+        fix: "To fix it, add the gatekeeper test below so direct `cargo test` runs fail with instructions and ratchet runs can set `TDD_RATCHET=1`.".into(),
         details: Vec::new(),
         extra: Some(format!(
             "    #[test]\n\
