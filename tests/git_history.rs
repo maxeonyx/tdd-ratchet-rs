@@ -198,3 +198,30 @@ fn per_test_baseline_grandfathers_individual_test() {
     );
     dir.pass();
 }
+
+#[test]
+fn committed_rename_bridges_history_identity() {
+    let dir = TestDir::new();
+    init_repo(dir.path());
+
+    write_status(
+        dir.path(),
+        r#"{"tests":{"old_test":"pending","tdd_ratchet_gatekeeper":"passing"}}"#,
+    );
+    commit(dir.path(), "Add pending test");
+
+    write_status(
+        dir.path(),
+        r#"{"tests":{"new_test":"passing","tdd_ratchet_gatekeeper":"passing"},"renames":{"new_test":"old_test"}}"#,
+    );
+    commit(dir.path(), "Rename and pass test");
+
+    let violations = check_history(dir.path()).unwrap();
+    assert!(
+        !violations.iter().any(
+            |v| matches!(v, HistoryViolation::SkippedPending { test, .. } if test == "new_test")
+        ),
+        "Committed rename should bridge history for new_test: {violations:?}"
+    );
+    dir.pass();
+}
