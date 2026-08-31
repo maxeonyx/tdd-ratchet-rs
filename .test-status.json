@@ -28,7 +28,7 @@
     "tdd-ratchet::report_messages$regression_report_names_the_regressed_tests_and_explains_the_fix": "passing",
     "tdd-ratchet::report_messages$missing_gatekeeper_report_explains_bypass_prevention": "passing",
     "tdd-ratchet::report_messages$rename_violation_report_explains_identity_bridge_requirements": "passing",
-    "tdd-ratchet::report_messages$rename_warning_report_is_also_self_documenting": "pending",
+    "tdd-ratchet::report_messages$rename_warning_report_is_also_self_documenting": "passing",
     "tdd-ratchet::git_history$no_status_file_in_history_is_ok": "passing",
     "tdd-ratchet::git_history$committed_rename_bridges_history_identity": "passing",
     "tdd-ratchet::git_history$per_test_baseline_grandfathers_individual_test": {

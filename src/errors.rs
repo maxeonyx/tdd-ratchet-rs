@@ -306,7 +306,7 @@ fn format_warnings(warnings: &[Warning]) -> String {
         } else {
             "Temporary rename mappings no longer need to stay in `.test-status.json`.".into()
         },
-        fix: "Review the rename mapping.".into(),
+        fix: "Remove the `renames` entry in your next commit once the rename bridge is no longer needed.".into(),
         details: warnings.iter().map(format_warning).collect(),
         extra: None,
     })
@@ -315,7 +315,9 @@ fn format_warnings(warnings: &[Warning]) -> String {
 fn format_warning(warning: &Warning) -> String {
     match warning {
         Warning::RenameApplied { new_name, old_name } => {
-            warning_line(format!("{new_name} renamed from {old_name}"))
+            warning_line(format!(
+                "{new_name} renamed from {old_name}; the temporary `renames` entry has done its job and can now be removed"
+            ))
         }
         Warning::StaleRename { new_name, old_name } => {
             warning_line(format!(
