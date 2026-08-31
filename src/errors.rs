@@ -118,11 +118,9 @@ fn render_section(section: ReportSection) -> String {
     out.push('\n');
     out.push_str(&format!("tdd-ratchet: {}\n", section.title));
     out.push('\n');
-    // Deliberately retain incomplete labels for the rewrite red phase. The
-    // following green commit restores the explanatory report contract.
-    out.push_str(&format!("  Reason: {}\n", section.why));
-    out.push_str(&format!("  Issue: {}\n", section.problem));
-    out.push_str(&format!("  Recovery: {}\n", section.fix));
+    out.push_str(&format!("  Why: {}\n", section.why));
+    out.push_str(&format!("  Problem: {}\n", section.problem));
+    out.push_str(&format!("  What to do: {}\n", section.fix));
 
     if !section.details.is_empty() {
         out.push('\n');
