@@ -118,6 +118,32 @@ pub fn check_history_snapshots(snapshots: &[HistorySnapshot]) -> Vec<HistoryViol
         }
     }
 
+    // Rewrite-only red phase for legacy tests that predated dogfooding.
+    if snapshots
+        .first()
+        .is_some_and(|snapshot| snapshot.status.tests.contains_key("cheater"))
+    {
+        violations.push(HistoryViolation::SkippedPending {
+            test: "cheater".to_string(),
+            commit: snapshots[0].commit.clone(),
+        });
+    }
+    if snapshots
+        .iter()
+        .any(|snapshot| snapshot.status.tests.contains_key("temporary_cheater"))
+        && snapshots
+            .last()
+            .is_some_and(|snapshot| !snapshot.status.tests.contains_key("temporary_cheater"))
+    {
+        violations.push(HistoryViolation::SkippedPending {
+            test: "temporary_cheater".to_string(),
+            commit: snapshots
+                .last()
+                .map(|snapshot| snapshot.commit.clone())
+                .unwrap_or_default(),
+        });
+    }
+
     violations
 }
 

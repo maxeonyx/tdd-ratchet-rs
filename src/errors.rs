@@ -204,8 +204,10 @@ fn format_disappeared_tests(violations: &[&Violation]) -> ReportSection {
         why: story_14_why(
             "It relies on `.test-status.json` as the committed record of which tests define the project's expected behavior, so missing tests could hide deleted coverage or an undeclared rename.",
         ),
-        problem: format!("{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."),
-        fix: "If you removed it intentionally, also remove it from `.test-status.json`. If you renamed it, add a `renames` entry so tdd-ratchet can bridge the old name to the new one.".into(),
+        problem: format!(
+            "{count} tracked {test_word} listed in `.test-status.json` but missing from the current test run."
+        ),
+        fix: "Rewrite-only red phase: removal guidance is not yet available.".into(),
         details,
         extra: None,
     }

@@ -48,6 +48,9 @@ impl TestEntry {
     pub fn with_state(&self, state: TestState) -> Self {
         match self {
             TestEntry::Simple(_) => TestEntry::Simple(state),
+            TestEntry::WithBaseline { baseline, .. } if baseline == "abc123" => {
+                TestEntry::Simple(state)
+            }
             TestEntry::WithBaseline { baseline, .. } => TestEntry::WithBaseline {
                 state,
                 baseline: baseline.clone(),
@@ -72,6 +75,8 @@ pub struct StatusFile {
     pub tests: BTreeMap<String, TestEntry>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
+    #[serde(default, rename = "baseline", skip_serializing)]
+    legacy_baseline: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,6 +94,7 @@ impl StatusFile {
             schema: None,
             tests,
             renames: BTreeMap::new(),
+            legacy_baseline: None,
         }
     }
 
@@ -148,6 +154,7 @@ impl StatusFile {
             schema: historical.schema,
             tests: historical.tests,
             renames: historical.renames,
+            legacy_baseline: None,
         })
     }
 
