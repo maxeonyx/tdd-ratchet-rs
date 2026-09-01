@@ -4,7 +4,7 @@
 
 use tdd_ratchet::ratchet::{RatchetViolation, check_ratchet, evaluate};
 use tdd_ratchet::runner::{TestOutcome, TestResult};
-use tdd_ratchet::status::{StatusFile, TestState};
+use tdd_ratchet::status::{StatusFile, TestState, WorkingTreeInstructions};
 
 fn status(tests: &[(&str, TestState)]) -> StatusFile {
     StatusFile::new(tests.iter().map(|(n, s)| (n.to_string(), *s)).collect())
@@ -18,6 +18,16 @@ fn results(tests: &[(&str, TestOutcome)]) -> Vec<TestResult> {
             outcome: *o,
         })
         .collect()
+}
+
+fn instructions(renames: &[(&str, &str)], removals: &[&str]) -> WorkingTreeInstructions {
+    WorkingTreeInstructions {
+        renames: renames
+            .iter()
+            .map(|(new_name, old_name)| (new_name.to_string(), old_name.to_string()))
+            .collect(),
+        removals: removals.iter().map(|name| name.to_string()).collect(),
+    }
 }
 
 // --- Story 5: New tests must fail first ---
@@ -205,7 +215,6 @@ fn renamed_test_is_not_treated_as_new_or_missing() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -243,7 +252,6 @@ fn invalid_rename_is_reported() {
         &sf.working_tree_instructions(),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -263,10 +271,7 @@ fn declared_removal_of_passing_test_is_accepted_and_removed_from_output() {
   "tests": {
     "tracked_test": "passing",
     "tdd_ratchet_gatekeeper": "passing"
-  },
-  "removals": [
-    "tracked_test"
-  ]
+  }
 }"#,
     )
     .expect("removal support should parse");
@@ -274,10 +279,9 @@ fn declared_removal_of_passing_test_is_accepted_and_removed_from_output() {
 
     let outcome = evaluate(
         &sf.tracked_status(),
-        &sf.working_tree_instructions(),
+        &instructions(&[], &["tracked_test"]),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -299,10 +303,7 @@ fn declared_removal_of_pending_test_is_accepted_and_removed_from_output() {
   "tests": {
     "tracked_test": "pending",
     "tdd_ratchet_gatekeeper": "passing"
-  },
-  "removals": [
-    "tracked_test"
-  ]
+  }
 }"#,
     )
     .expect("removal support should parse");
@@ -310,10 +311,9 @@ fn declared_removal_of_pending_test_is_accepted_and_removed_from_output() {
 
     let outcome = evaluate(
         &sf.tracked_status(),
-        &sf.working_tree_instructions(),
+        &instructions(&[], &["tracked_test"]),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -334,10 +334,7 @@ fn removal_of_unknown_test_is_reported() {
         r#"{
   "tests": {
     "tdd_ratchet_gatekeeper": "passing"
-  },
-  "removals": [
-    "missing_test"
-  ]
+  }
 }"#,
     )
     .expect("removal support should parse");
@@ -345,10 +342,9 @@ fn removal_of_unknown_test_is_reported() {
 
     let outcome = evaluate(
         &sf.tracked_status(),
-        &sf.working_tree_instructions(),
+        &instructions(&[], &["missing_test"]),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -368,10 +364,7 @@ fn removal_of_test_still_present_in_results_is_reported() {
   "tests": {
     "tracked_test": "passing",
     "tdd_ratchet_gatekeeper": "passing"
-  },
-  "removals": [
-    "tracked_test"
-  ]
+  }
 }"#,
     )
     .expect("removal support should parse");
@@ -382,10 +375,9 @@ fn removal_of_test_still_present_in_results_is_reported() {
 
     let outcome = evaluate(
         &sf.tracked_status(),
-        &sf.working_tree_instructions(),
+        &instructions(&[], &["tracked_test"]),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -405,13 +397,7 @@ fn removal_conflicting_with_rename_is_reported() {
   "tests": {
     "old_test": "passing",
     "tdd_ratchet_gatekeeper": "passing"
-  },
-  "renames": {
-    "new_test": "old_test"
-  },
-  "removals": [
-    "old_test"
-  ]
+  }
 }"#,
     )
     .expect("removal support should parse");
@@ -422,10 +408,9 @@ fn removal_conflicting_with_rename_is_reported() {
 
     let outcome = evaluate(
         &sf.tracked_status(),
-        &sf.working_tree_instructions(),
+        &instructions(&[("new_test", "old_test")], &["old_test"]),
         &tr,
         &[],
-        0,
     );
 
     assert!(
@@ -445,10 +430,7 @@ fn successful_removal_is_transient_in_output() {
   "tests": {
     "tracked_test": "passing",
     "tdd_ratchet_gatekeeper": "passing"
-  },
-  "removals": [
-    "tracked_test"
-  ]
+  }
 }"#,
     )
     .expect("removal support should parse");
@@ -456,10 +438,9 @@ fn successful_removal_is_transient_in_output() {
 
     let outcome = evaluate(
         &sf.tracked_status(),
-        &sf.working_tree_instructions(),
+        &instructions(&[], &["tracked_test"]),
         &tr,
         &[],
-        0,
     );
 
     let output_json = serde_json::to_string(&outcome.updated).unwrap();

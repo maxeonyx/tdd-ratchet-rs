@@ -4,7 +4,7 @@ TDD ratchet for pure Rust projects — enforces failing-first test workflow via 
 
 ## What it does
 
-A dev dependency binary that wraps `cargo test` / `cargo nextest`. It reads ratchet input from the committed `.test-status.json` in git history, writes the updated status file to the working tree, and enforces that new tests must fail before they can pass, verified by git history introspection.
+A dev dependency binary that wraps `cargo test` / `cargo nextest`. It reads ratchet input from the committed `.test-status.json` ledger, writes a local preview, and enforces that new tests must fail before they can pass by inspecting git history. On pull requests, the trusted ledger workflow validates the change and records the preview with a dedicated bot commit.
 
 See [VISION.md](VISION.md) for full requirements and [PLAN.md](PLAN.md) for stories and design decisions.
 
@@ -31,14 +31,18 @@ cargo ratchet --help
 cargo ratchet --version
 ```
 
-On the first run in a project, `cargo ratchet` treats the status as empty if no committed `.test-status.json` exists yet. It writes the updated `.test-status.json` to the working tree; commit that file along with your code changes so the next run reads it from `HEAD`.
+Use `cargo ratchet --init` once, before enabling the trusted ledger workflow, to create the repository's adoption snapshot. After adoption, treat `.test-status.json` as bot-written output: commit test and implementation changes separately, push each state to a pull request, and wait for the trusted ledger workflow to record `pending` before implementing and `passing` afterward.
+
+Declare a deliberate rename or removal in `.tdd-ratchet.json`. The ratchet validates that instruction, records any rename bridge in the ledger, and keeps removals out of the ledger schema. Remove the instruction file after the bot records the transition.
+
+The writer runs for same-repository pull requests. For a fork contribution, a maintainer must first move the commits onto a repository branch so the trusted workflow can validate and record the ledger without granting the fork a write path.
 
 Do not run `cargo test` directly. The ratchet will ask you to add a "gatekeeper" test to enforce this.
 
 ## Developing
 
 ```
-cargo test
+cargo ratchet
 ```
 
 Prerequisites: Rust toolchain.

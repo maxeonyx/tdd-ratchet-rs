@@ -191,13 +191,12 @@ fn save_normalizes_simple_entries_as_strings() {
 }
 
 #[test]
-fn top_level_baseline_field_is_accepted() {
+fn top_level_baseline_field_is_rejected_by_the_current_schema() {
     let json = r#"{"tests":{"a":"passing"},"baseline":"0123456789abcdef0123456789abcdef01234567"}"#;
-    let status: StatusFile =
-        serde_json::from_str(json).expect("top-level baseline should be accepted");
-    assert_eq!(
-        status.baseline.as_deref(),
-        Some("0123456789abcdef0123456789abcdef01234567")
+    let result: Result<StatusFile, _> = serde_json::from_str(json);
+    assert!(
+        result.is_err(),
+        "The movable baseline escape hatch must not be part of the current schema"
     );
 }
 
@@ -206,6 +205,16 @@ fn top_level_checks_field_is_accepted() {
     let json = r#"{"tests":{"a":"passing"},"checks":{"cargo_fmt":"passing"}}"#;
     let status: StatusFile = serde_json::from_str(json).expect("checks field should be accepted");
     assert_eq!(status.checks["cargo_fmt"], TestState::Passing);
+}
+
+#[test]
+fn committed_status_rejects_transient_removal_instructions() {
+    let json = r#"{"tests":{"a":"passing"},"removals":["a"]}"#;
+    let result: Result<StatusFile, _> = serde_json::from_str(json);
+    assert!(
+        result.is_err(),
+        "developer-owned removal requests must not be accepted as committed ledger state"
+    );
 }
 
 #[test]
@@ -244,37 +253,6 @@ fn status_file_with_renames_loads_and_round_trips() {
 }
 
 #[test]
-fn status_file_with_removals_loads_but_does_not_round_trip_them() {
-    let dir = TestDir::new();
-    let path = dir.path().join(".test-status.json");
-
-    fs::write(
-        &path,
-        r#"{
-  "tests": {
-    "other_test": "passing"
-  },
-  "removals": [
-    "retired_test"
-  ]
-}
-"#,
-    )
-    .unwrap();
-
-    let status = StatusFile::load(&path).unwrap();
-    assert_eq!(status.tests["other_test"], TestState::Passing);
-
-    status.save(&path).unwrap();
-    let round_trip = fs::read_to_string(&path).unwrap();
-    assert!(
-        !round_trip.contains("\"removals\""),
-        "Saved file should not persist removals: {round_trip}"
-    );
-    dir.pass();
-}
-
-#[test]
 fn schema_accepts_renames_section() {
     let schema_str = fs::read_to_string("docs/schema/test-status.v1.json")
         .expect("Schema file should exist at docs/schema/test-status.v1.json");
@@ -296,36 +274,6 @@ fn schema_accepts_renames_section() {
     assert!(
         errors.is_empty(),
         "Schema should accept renames section:\n{}",
-        errors
-            .iter()
-            .map(|e| format!("  - {e}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-}
-
-#[test]
-fn schema_accepts_removals_section() {
-    let schema_str = fs::read_to_string("docs/schema/test-status.v1.json")
-        .expect("Schema file should exist at docs/schema/test-status.v1.json");
-    let schema: serde_json::Value = serde_json::from_str(&schema_str).unwrap();
-
-    let instance = serde_json::json!({
-        "tests": {
-            "other_test": "passing"
-        },
-        "removals": [
-            "retired_test"
-        ]
-    });
-
-    let validator =
-        jsonschema::validator_for(&schema).expect("Schema should be a valid JSON Schema");
-
-    let errors: Vec<_> = validator.iter_errors(&instance).collect();
-    assert!(
-        errors.is_empty(),
-        "Schema should accept removals section:\n{}",
         errors
             .iter()
             .map(|e| format!("  - {e}"))

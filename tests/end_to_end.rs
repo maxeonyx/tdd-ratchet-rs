@@ -171,9 +171,12 @@ fn tdd_ratchet_gatekeeper() {
 }
 
 fn set_status_renames(dir: &Path, renames: &[(&str, &str)]) {
-    let status_path = dir.join(".test-status.json");
-    let mut status: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+    let instructions_path = dir.join(".tdd-ratchet.json");
+    let mut instructions: serde_json::Value = if instructions_path.exists() {
+        serde_json::from_str(&fs::read_to_string(&instructions_path).unwrap()).unwrap()
+    } else {
+        serde_json::json!({})
+    };
 
     let renames_object = renames
         .iter()
@@ -185,21 +188,24 @@ fn set_status_renames(dir: &Path, renames: &[(&str, &str)]) {
         })
         .collect();
 
-    status["renames"] = serde_json::Value::Object(renames_object);
+    instructions["renames"] = serde_json::Value::Object(renames_object);
 
     fs::write(
-        &status_path,
-        serde_json::to_string_pretty(&status).unwrap() + "\n",
+        &instructions_path,
+        serde_json::to_string_pretty(&instructions).unwrap() + "\n",
     )
     .unwrap();
 }
 
 fn set_status_removals(dir: &Path, removals: &[&str]) {
-    let status_path = dir.join(".test-status.json");
-    let mut status: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
+    let instructions_path = dir.join(".tdd-ratchet.json");
+    let mut instructions: serde_json::Value = if instructions_path.exists() {
+        serde_json::from_str(&fs::read_to_string(&instructions_path).unwrap()).unwrap()
+    } else {
+        serde_json::json!({})
+    };
 
-    status["removals"] = serde_json::Value::Array(
+    instructions["removals"] = serde_json::Value::Array(
         removals
             .iter()
             .map(|name| serde_json::Value::String((*name).to_string()))
@@ -207,8 +213,8 @@ fn set_status_removals(dir: &Path, removals: &[&str]) {
     );
 
     fs::write(
-        &status_path,
-        serde_json::to_string_pretty(&status).unwrap() + "\n",
+        &instructions_path,
+        serde_json::to_string_pretty(&instructions).unwrap() + "\n",
     )
     .unwrap();
 }
@@ -223,6 +229,72 @@ fn init_creates_empty_status_file() {
     assert!(
         dir.path().join(".test-status.json").exists(),
         "Status file should be created"
+    );
+    dir.pass();
+}
+
+#[test]
+fn init_after_committed_ledger_deletion_is_rejected() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    add_gatekeeper(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "initial adoption should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt tdd-ratchet");
+
+    fs::remove_file(dir.path().join(".test-status.json")).unwrap();
+    git_add_commit(dir.path(), "Delete the ledger");
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(!ok, "reinitialization after deletion must fail: {out}");
+    assert!(
+        out.contains("already adopted") && out.contains("restore"),
+        "failure should explain that history, not a new adoption, is authoritative: {out}"
+    );
+    dir.pass();
+}
+
+#[test]
+fn removal_requests_are_read_from_the_separate_instruction_file() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    add_gatekeeper(dir.path());
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "initial adoption should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt tdd-ratchet");
+
+    set_test_file(
+        dir.path(),
+        "retire_via_instruction.rs",
+        r#"
+#[test]
+fn retire_via_instruction() {
+    panic!("expected red test");
+}
+"#,
+    );
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(ok, "the failing test should become pending: {out}");
+    git_add_commit(dir.path(), "Record the pending test");
+
+    fs::remove_file(dir.path().join("tests/retire_via_instruction.rs")).unwrap();
+    fs::write(
+        dir.path().join(".tdd-ratchet.json"),
+        r#"{"removals":["test-project::retire_via_instruction$retire_via_instruction"]}"#,
+    )
+    .unwrap();
+
+    let (ok, out) = run_ratchet(dir.path());
+    assert!(
+        ok,
+        "the separate instruction file should authorize retirement: {out}"
+    );
+    let status = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        !status.contains("retire_via_instruction$retire_via_instruction"),
+        "retired test should be absent from the generated ledger: {status}"
     );
     dir.pass();
 }
@@ -300,9 +372,9 @@ fn running_in_repo_without_commits_shows_init_guidance() {
     let (ok, out) = run_ratchet(dir.path());
     assert!(!ok, "run without commits should fail: {out}");
     assert!(
-        out.contains(
-            "tdd-ratchet: no commits found. Run `cargo ratchet --init`, then commit .test-status.json before running again."
-        ),
+        out.contains("Commit the project first")
+            && out.contains("run `cargo ratchet --init` once")
+            && out.contains("trusted ledger workflow"),
         "primary error should explain the unborn-branch workflow: {out}"
     );
     assert!(
@@ -1088,45 +1160,6 @@ fn new_name() {
     assert!(
         out.contains("stale") || out.contains("remove"),
         "Stale rename should produce a warning: {out}"
-    );
-    dir.pass();
-}
-
-#[test]
-fn ratchet_run_preserves_existing_top_level_baseline() {
-    // A committed adoption baseline must survive a ratchet run: the run reads
-    // HEAD, evaluates, and writes the status file back, and the baseline must
-    // still be there afterwards (otherwise the dogfood self-destructs).
-    let dir = TestDir::new();
-    create_test_project(dir.path());
-    add_gatekeeper(dir.path());
-
-    // Establish a committed status file via init + commit.
-    let (ok, out) = run_ratchet_init(dir.path());
-    assert!(ok, "init should succeed: {out}");
-    git_add_commit(dir.path(), "Adopt tdd-ratchet");
-
-    // Hand-set a top-level baseline in the committed status file. Any 40-hex
-    // SHA resolves to nothing in this tiny repo → bootstrap for the two-commit
-    // check, but the field itself must be preserved verbatim across runs.
-    let baseline = "0123456789abcdef0123456789abcdef01234567";
-    let status_path = dir.path().join(".test-status.json");
-    let mut status: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&status_path).unwrap()).unwrap();
-    status["baseline"] = serde_json::Value::String(baseline.to_string());
-    fs::write(&status_path, serde_json::to_string_pretty(&status).unwrap()).unwrap();
-    git_add_commit(dir.path(), "Set adoption baseline");
-
-    // Run the ratchet; it rewrites the working-tree status file.
-    let (ok, out) = run_ratchet(dir.path());
-    assert!(ok, "Ratchet run should succeed: {out}");
-
-    let written = fs::read_to_string(&status_path).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&written).unwrap();
-    assert_eq!(
-        parsed["baseline"].as_str(),
-        Some(baseline),
-        "Top-level baseline must survive a ratchet run: {written}"
     );
     dir.pass();
 }

@@ -19,6 +19,8 @@ chmod +x ~/.cargo/bin/cargo-ratchet
 ## Usage
 
 ```bash
-cargo ratchet         # Verify the project's recorded test history still satisfies the ratchet
-cargo ratchet --init  # Create .test-status.json from the current passing test set
+cargo ratchet         # Verify history and preview the next trusted ledger state
+cargo ratchet --init  # One-time adoption snapshot, before enabling the trusted workflow
 ```
+
+After adoption, do not commit `.test-status.json` by hand. Push each red or green code commit to a pull request and let the trusted ledger workflow record the corresponding status. Put deliberate test `renames` or `removals` in `.tdd-ratchet.json`.

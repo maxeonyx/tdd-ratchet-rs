@@ -3,7 +3,34 @@
 // Stories 2, 3: The ratchet invokes cargo nextest and parses per-test results
 // from libtest-json structured output.
 
-use tdd_ratchet::runner::{TestOutcome, TestResult, parse_nextest_output};
+use std::collections::BTreeSet;
+use std::path::Path;
+use tdd_ratchet::runner::{TestOutcome, TestResult, nextest_command, parse_nextest_output};
+
+#[test]
+fn git_repository_environment_is_removed_from_nextest_command() {
+    let command = nextest_command(Path::new("."));
+    let removed: BTreeSet<_> = command
+        .get_envs()
+        .filter_map(|(name, value)| value.is_none().then(|| name.to_string_lossy().into_owned()))
+        .collect();
+
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_PREFIX",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ] {
+        assert!(
+            removed.contains(name),
+            "{name} should be removed: {removed:?}"
+        );
+    }
+}
 
 #[test]
 fn parses_mixed_pass_and_fail() {

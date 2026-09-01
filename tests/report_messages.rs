@@ -59,10 +59,29 @@ fn new_test_passed_report_uses_common_explanatory_fields() {
         &[
             "suite::new_test",
             "must fail before it is allowed to pass",
-            "Always commit `.test-status.json` whenever tdd-ratchet changes it.",
-            "Write the failing test, run `cargo ratchet`, and commit the test code together with `.test-status.json` showing that test as `pending`.",
-            "Then write the implementation, run `cargo ratchet` again, and commit the implementation together with `.test-status.json` showing that test as `passing`.",
+            "Do not hand-edit `.test-status.json`; the trusted ledger workflow writes it.",
+            "commit and push the test code",
+            "wait for the workflow's bot commit to record it as `pending`",
+            "push the implementation so the workflow can record `passing`",
             "If history is already wrong, rebase so the commits follow that sequence.",
+        ],
+    );
+}
+
+#[test]
+fn already_working_behavior_guidance_suggests_temporarily_breaking_the_implementation() {
+    let report = report_with_violations(vec![Violation::NewTestPassed {
+        test: "suite::regression_test_for_existing_behavior".into(),
+    }]);
+
+    assert_contains_all(
+        &report,
+        &[
+            "If the behavior already works",
+            "temporarily break the implementation",
+            "push the test while it is failing",
+            "wait for the `pending` bot commit",
+            "restore the implementation",
         ],
     );
 }
@@ -79,7 +98,8 @@ fn regression_report_names_the_regressed_tests_and_explains_the_fix() {
         &[
             "suite::fragile_test",
             "was previously tracked as passing",
-            "Fix the failing test, or if the change is intentional, run `cargo ratchet` and commit the code change together with the updated `.test-status.json`.",
+            "Restore the passing behavior and rerun `cargo ratchet`.",
+            "use a rename or removal instruction in `.tdd-ratchet.json`",
         ],
     );
 }
@@ -96,8 +116,8 @@ fn disappeared_test_report_explains_the_rule_and_removals_workflow() {
         &[
             "suite::removed_test",
             "listed in `.test-status.json` but missing from the current test run",
-            "working-tree `removals` list",
-            "commit the test removal together with the updated `.test-status.json`",
+            "`removals` list in `.tdd-ratchet.json`",
+            "trusted workflow can update the ledger",
         ],
     );
 }
@@ -116,8 +136,8 @@ fn rename_violation_report_explains_identity_bridge_requirements() {
             "suite::new_name",
             "suite::old_name",
             "rename instruction is invalid",
-            "correct the `renames` entry so it bridges one committed old name to one observed new name",
-            "commit the rename together with the `.test-status.json` update",
+            "correct the `renames` entry in `.tdd-ratchet.json`",
+            "trusted workflow can update the ledger",
         ],
     );
 }
@@ -155,7 +175,7 @@ fn rename_warning_report_is_also_self_documenting() {
             "suite::new_name",
             "suite::old_name",
             "the temporary `renames` entry has done its job",
-            "Remove the `renames` entry in your next commit",
+            "Remove the `renames` entry from `.tdd-ratchet.json` in your next commit",
         ],
     );
 }

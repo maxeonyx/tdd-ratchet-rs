@@ -43,10 +43,26 @@ impl TrackedStatus {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorkingTreeInstructions {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub removals: BTreeSet<String>,
+}
+
+impl WorkingTreeInstructions {
+    pub fn read_from_path(path: &Path) -> Result<Self, StatusFileError> {
+        let contents = std::fs::read_to_string(path).map_err(|e| StatusFileError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
+        serde_json::from_str(&contents).map_err(|e| StatusFileError::Parse {
+            path: path.to_path_buf(),
+            source: e,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,13 +71,6 @@ pub struct StatusFile {
     /// JSON Schema reference — always set to the canonical URL on save.
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     schema: Option<String>,
-
-    /// Immutable adoption baseline. The commit at which this project began
-    /// enforcing the ratchet. Once set, it must never change (see the
-    /// two-commit immutability check). Absent on projects that adopted before
-    /// this field existed, and on fresh projects until they deliberately set it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub baseline: Option<String>,
 
     pub tests: BTreeMap<String, TestState>,
 
@@ -73,8 +82,6 @@ pub struct StatusFile {
 
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub renames: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub removals: BTreeSet<String>,
 }
 
 /// Lenient per-test entry used only on the historical-read path. Accepts the
@@ -106,8 +113,6 @@ impl HistoricalTestEntry {
 struct HistoricalStatusFile {
     #[serde(rename = "$schema", default)]
     schema: Option<String>,
-    #[serde(default)]
-    baseline: Option<String>,
     tests: BTreeMap<String, HistoricalTestEntry>,
     #[serde(default)]
     renames: BTreeMap<String, String>,
@@ -125,11 +130,9 @@ impl StatusFile {
     pub fn from_parts(status: TrackedStatus, instructions: WorkingTreeInstructions) -> Self {
         StatusFile {
             schema: None,
-            baseline: None,
             tests: status.tests,
             checks: BTreeMap::new(),
             renames: instructions.renames,
-            removals: BTreeSet::new(),
         }
     }
 
@@ -150,7 +153,7 @@ impl StatusFile {
     pub fn working_tree_instructions(&self) -> WorkingTreeInstructions {
         WorkingTreeInstructions {
             renames: self.renames.clone(),
-            removals: self.removals.clone(),
+            removals: BTreeSet::new(),
         }
     }
 
@@ -169,11 +172,9 @@ impl StatusFile {
     }
 
     pub fn write_to_path(&self, path: &Path) -> Result<(), StatusFileError> {
-        // Always write the $schema key. Working-tree removals are transient and
-        // never persisted into the ratchet-generated output.
+        // Always write the $schema key.
         let mut with_schema = self.clone();
         with_schema.schema = Some(SCHEMA_URL.to_string());
-        with_schema.removals.clear();
         let contents =
             serde_json::to_string_pretty(&with_schema).map_err(|e| StatusFileError::Serialize {
                 path: path.to_path_buf(),
@@ -202,7 +203,6 @@ impl StatusFile {
 
         Ok(StatusFile {
             schema: historical.schema,
-            baseline: historical.baseline,
             tests: historical
                 .tests
                 .into_iter()
@@ -210,7 +210,6 @@ impl StatusFile {
                 .collect(),
             checks: BTreeMap::new(),
             renames: historical.renames,
-            removals: BTreeSet::new(),
         })
     }
 
