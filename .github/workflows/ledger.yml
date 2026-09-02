@@ -47,7 +47,8 @@ jobs:
             if grep -qx '.test-status.json' <<<"$changed"; then
               test "$changed" = '.test-status.json'
               test "$(gh api "repos/$REPOSITORY/commits/$commit" --jq '.commit.verification.verified')" = true
-              test "$(gh api "repos/$REPOSITORY/commits/$commit" --jq '.committer.login')" = 'github-actions[bot]'
+              test "$(gh api "repos/$REPOSITORY/commits/$commit" --jq '.author.login')" = 'github-actions[bot]'
+              test "$(gh api "repos/$REPOSITORY/commits/$commit" --jq '.committer.login')" = 'web-flow'
             fi
           done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
 
