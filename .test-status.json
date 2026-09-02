@@ -47,7 +47,7 @@
     "tdd-ratchet::git_history$tests_in_adoption_snapshot_are_trusted": "passing",
     "tdd-ratchet::help_examples$help_examples": "passing",
     "tdd-ratchet::ledger_workflow$privileged_ledger_workflow_enforces_the_writer_boundary": "passing",
-    "tdd-ratchet::ledger_workflow$proposed_ledger_upload_includes_hidden_files": "pending",
+    "tdd-ratchet::ledger_workflow$proposed_ledger_upload_includes_hidden_files": "passing",
     "tdd-ratchet::ledger_workflow$validator_builds_the_ratchet_from_base_controlled_source": "passing",
     "tdd-ratchet::ledger_workflow$validator_recognizes_the_signed_git_data_api_writer_identity": "passing",
     "tdd-ratchet::ledger_workflow$writer_semantically_revalidates_untrusted_artifact": "passing",
