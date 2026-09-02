@@ -36,6 +36,17 @@ fn privileged_ledger_workflow_enforces_the_writer_boundary() {
 }
 
 #[test]
+fn validator_recognizes_the_signed_git_data_api_writer_identity() {
+    let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
+
+    assert!(
+        workflow.contains(".author.login')\" = 'github-actions[bot]'")
+            && workflow.contains(".committer.login')\" = 'web-flow'"),
+        "GitHub records Git Data API commits with the Actions bot as author and web-flow as signed committer"
+    );
+}
+
+#[test]
 fn validator_builds_the_ratchet_from_base_controlled_source() {
     let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
 
