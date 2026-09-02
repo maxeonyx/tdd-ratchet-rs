@@ -24,6 +24,7 @@
 14. ~~As a user of tdd-ratchet, I want the ratchet output to be self-documenting. When a violation occurs, it should explain: (a) why the ratchet exists (enforcing test-first discipline), (b) what the specific violation is, (c) what to do about it (e.g. rebase tests and implementation into separate commits). A first-time user encountering the ratchet should understand it without reading external docs.~~ ✅
 
 15. ~~As a user of tdd-ratchet, I want to intentionally remove tests without the ratchet blocking me. A `removals` list in `.tdd-ratchet.json` declares test names to retire. The ratchet validates each removal, removes the entry from generated ledger output, and rejects undeclared disappearances as before.~~ ✅
+16. ~~As a user of tdd-ratchet, I want failed Cargo/Nextest execution and invalid CLI options rejected before the trusted ledger is evaluated or written, with the original process evidence and relevant recovery preserved.~~ ✅
 
 ### Developer stories
 

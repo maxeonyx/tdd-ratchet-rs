@@ -7,7 +7,9 @@ mod common;
 use common::TestDir;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
+
+const EXPECTED_HELP: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version [--json]]\n\nPrerequisite:\n  cargo-nextest must be installed and available as `cargo nextest`.\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help, -h      Print help\n  --version, -V   Print version; combine with --json for machine-readable metadata\n  --json          Format --version output as JSON\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n  $ cargo ratchet --version --json  # Print machine-readable version metadata\n";
 
 fn cargo_bin() -> PathBuf {
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_cargo-ratchet") {
@@ -139,7 +141,14 @@ fn run_ratchet_init(dir: &Path) -> (bool, String) {
 }
 
 fn run_ratchet_args(dir: &Path, args: &[&str]) -> (bool, String) {
-    let output = Command::new(cargo_bin())
+    let output = run_ratchet_output(dir, args);
+    let out = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
+    (output.status.success(), out)
+}
+
+fn run_ratchet_output(dir: &Path, args: &[&str]) -> Output {
+    Command::new(cargo_bin())
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -147,10 +156,7 @@ fn run_ratchet_args(dir: &Path, args: &[&str]) -> (bool, String) {
         .env("RUSTUP_HOME", rustup_home())
         .env("CARGO_HOME", cargo_home())
         .output()
-        .unwrap();
-    let out = String::from_utf8_lossy(&output.stdout).to_string()
-        + &String::from_utf8_lossy(&output.stderr);
-    (output.status.success(), out)
+        .unwrap()
 }
 
 /// Add the gatekeeper test to a test project.
@@ -324,7 +330,7 @@ fn help_flag_prints_usage_without_running_ratchet() {
 
     let (ok, out) = run_ratchet_args(dir.path(), &["--help"]);
     assert!(ok, "--help should succeed: {out}");
-    assert!(out.contains("Usage: cargo ratchet [--init] [--help] [--version]"));
+    assert!(out.contains("Usage: cargo ratchet [--init] [--help] [--version [--json]]"));
     assert!(
         out.contains("New tests must fail in one committed run before they are allowed to pass")
     );
@@ -336,6 +342,77 @@ fn help_flag_prints_usage_without_running_ratchet() {
         !dir.path().join(".test-status.json").exists(),
         "--help should not run the ratchet"
     );
+    dir.pass();
+}
+
+#[test]
+fn help_output_is_complete_and_stable() {
+    let dir = TestDir::new();
+
+    for args in [&["--help"][..], &["ratchet", "--help"][..]] {
+        let output = run_ratchet_output(dir.path(), args);
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout), EXPECTED_HELP);
+        assert!(output.stderr.is_empty());
+    }
+    assert!(!dir.path().join(".test-status.json").exists());
+    dir.pass();
+}
+
+#[test]
+fn unknown_option_is_rejected_before_project_inspection() {
+    let dir = TestDir::new();
+
+    let output = run_ratchet_output(dir.path(), &["--not-a-real-option"]);
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "tdd-ratchet: unrecognized option `--not-a-real-option`\nRun `cargo ratchet --help` for usage.\n"
+    );
+    assert!(!dir.path().join(".test-status.json").exists());
+    dir.pass();
+}
+
+#[test]
+fn init_preserves_nextest_failure_and_does_not_write_ledger() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    fs::remove_file(dir.path().join("Cargo.toml")).unwrap();
+    git_add_commit(dir.path(), "Remove the manifest");
+
+    let output = run_ratchet_output(dir.path(), &["--init"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(!output.status.success());
+    assert!(
+        output.stdout.is_empty(),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        stderr.contains("tdd-ratchet: `cargo nextest` failed (exit status:")
+            && stderr.contains("could not find `Cargo.toml`")
+            && stderr.contains(
+                "Fix the Cargo or Nextest error above, then rerun `cargo ratchet --init`."
+            ),
+        "stderr should preserve the cause and relevant recovery: {stderr}"
+    );
+    assert!(
+        !dir.path().join(".test-status.json").exists(),
+        "a failed test run must not create the trusted ledger"
+    );
+
+    let ordinary_output = run_ratchet_output(dir.path(), &[]);
+    let ordinary_stderr = String::from_utf8_lossy(&ordinary_output.stderr);
+    assert!(!ordinary_output.status.success());
+    assert!(ordinary_stderr.contains("could not find `Cargo.toml`"));
+    assert!(
+        !ordinary_stderr.contains("gatekeeper"),
+        "a runner failure must not be misreported as a derived ratchet violation: {ordinary_stderr}"
+    );
+    assert!(!dir.path().join(".test-status.json").exists());
     dir.pass();
 }
 

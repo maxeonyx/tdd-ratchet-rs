@@ -4,8 +4,63 @@
 // from libtest-json structured output.
 
 use std::collections::BTreeSet;
+use std::io;
 use std::path::Path;
-use tdd_ratchet::runner::{TestOutcome, TestResult, nextest_command, parse_nextest_output};
+use std::process::Command;
+use tdd_ratchet::runner::{
+    CommandExecutor, CommandOutput, NextestError, TestOutcome, TestResult, nextest_command,
+    parse_nextest_output, run_nextest_with_executor,
+};
+
+struct FakeExecutor {
+    output: Option<CommandOutput>,
+}
+
+impl CommandExecutor for FakeExecutor {
+    fn output(&mut self, _command: &mut Command) -> io::Result<CommandOutput> {
+        Ok(self.output.take().expect("fake output should exist"))
+    }
+}
+
+#[test]
+fn failed_nextest_status_preserves_process_evidence() {
+    let expected = CommandOutput {
+        success: false,
+        code: Some(101),
+        status: "exit status: 101".into(),
+        stdout: "partial structured output\n".into(),
+        stderr: "error: could not find Cargo.toml\n".into(),
+    };
+    let mut executor = FakeExecutor {
+        output: Some(expected.clone()),
+    };
+
+    let error = run_nextest_with_executor(Path::new("."), &mut executor)
+        .expect_err("a failed test runner must not become an empty successful run");
+
+    assert_eq!(
+        error.to_string(),
+        "`cargo nextest` failed (exit status: 101)\npartial structured output\nerror: could not find Cargo.toml\n"
+    );
+    match error {
+        NextestError::Failed(output) => assert_eq!(output, expected),
+        other => panic!("expected failed process evidence, got {other:?}"),
+    }
+
+    for code in [4, 100] {
+        let mut executor = FakeExecutor {
+            output: Some(CommandOutput {
+                success: false,
+                code: Some(code),
+                status: format!("exit status: {code}"),
+                stdout: String::new(),
+                stderr: String::new(),
+            }),
+        };
+        run_nextest_with_executor(Path::new("."), &mut executor)
+            .unwrap_or_else(|error| panic!("nextest code {code} completed a test run: {error}"));
+    }
+}
 
 #[test]
 fn git_repository_environment_is_removed_from_nextest_command() {
