@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
-use std::process::{self, Stdio};
+use std::process;
 
 use tdd_ratchet::errors::format_report;
 use tdd_ratchet::history::{
     HistoryViolation, check_history, collect_history_snapshots, read_head_status,
 };
 use tdd_ratchet::ratchet::evaluate;
-use tdd_ratchet::runner::{TestOutcome, TestResult, nextest_command, parse_nextest_output};
+use tdd_ratchet::runner::{TestOutcome, TestResult, run_nextest as execute_nextest};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 
 const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n";
@@ -229,17 +229,14 @@ fn status_entries_from_results(results: &[TestResult]) -> BTreeMap<String, TestS
 }
 
 fn run_nextest(project_dir: &Path, inherit_stderr: bool) -> Vec<TestResult> {
-    let mut command = nextest_command(project_dir);
-
-    if inherit_stderr {
-        command.stderr(Stdio::inherit());
-    }
-
-    let output = command.output().unwrap_or_else(|e| {
-        eprintln!("tdd-ratchet: failed to run cargo nextest: {e}");
+    let run = execute_nextest(project_dir).unwrap_or_else(|error| {
+        eprintln!("tdd-ratchet: {error}");
         process::exit(1);
     });
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_nextest_output(&stdout)
+    if inherit_stderr {
+        eprint!("{}", run.stderr);
+    }
+
+    run.results
 }

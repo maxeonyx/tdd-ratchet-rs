@@ -2,6 +2,8 @@
 // libtest-json structured output.
 
 use serde::Deserialize;
+use std::fmt;
+use std::io;
 use std::path::Path;
 use std::process::Command;
 
@@ -16,6 +18,59 @@ pub enum TestOutcome {
     Passed,
     Failed,
     Ignored,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutput {
+    pub success: bool,
+    pub status: String,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+pub trait CommandExecutor {
+    fn output(&mut self, command: &mut Command) -> io::Result<CommandOutput>;
+}
+
+pub struct ProcessExecutor;
+
+impl CommandExecutor for ProcessExecutor {
+    fn output(&mut self, command: &mut Command) -> io::Result<CommandOutput> {
+        let output = command.output()?;
+        Ok(CommandOutput {
+            success: output.status.success(),
+            status: output.status.to_string(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub enum NextestError {
+    Start(io::Error),
+    Failed(CommandOutput),
+}
+
+impl fmt::Display for NextestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Start(error) => write!(formatter, "failed to start `cargo nextest`: {error}"),
+            Self::Failed(output) => write!(
+                formatter,
+                "`cargo nextest` failed ({})\n{}{}",
+                output.status, output.stdout, output.stderr
+            ),
+        }
+    }
+}
+
+impl std::error::Error for NextestError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestRun {
+    pub results: Vec<TestResult>,
+    pub stderr: String,
 }
 
 pub fn nextest_command(project_dir: &Path) -> Command {
@@ -44,6 +99,25 @@ pub fn nextest_command(project_dir: &Path) -> Command {
         command.env_remove(name);
     }
     command
+}
+
+pub fn run_nextest(project_dir: &Path) -> Result<TestRun, NextestError> {
+    run_nextest_with_executor(project_dir, &mut ProcessExecutor)
+}
+
+pub fn run_nextest_with_executor(
+    project_dir: &Path,
+    executor: &mut impl CommandExecutor,
+) -> Result<TestRun, NextestError> {
+    let mut command = nextest_command(project_dir);
+    let output = executor.output(&mut command).map_err(NextestError::Start)?;
+
+    // The status check is intentionally introduced by the green commit. This
+    // refactor first exposes the process boundary without changing behavior.
+    Ok(TestRun {
+        results: parse_nextest_output(&output.stdout),
+        stderr: output.stderr,
+    })
 }
 
 #[derive(Deserialize)]
