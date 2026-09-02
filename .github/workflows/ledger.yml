@@ -70,6 +70,7 @@ jobs:
           name: proposed-test-status
           path: pull-request/.test-status.json
           if-no-files-found: error
+          include-hidden-files: true
 
   write:
     needs: validate
