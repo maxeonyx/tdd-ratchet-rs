@@ -47,6 +47,18 @@ fn validator_recognizes_the_signed_git_data_api_writer_identity() {
 }
 
 #[test]
+fn proposed_ledger_upload_includes_hidden_files() {
+    let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
+
+    assert!(
+        workflow.contains(
+            "path: pull-request/.test-status.json\n          if-no-files-found: error\n          include-hidden-files: true"
+        ),
+        "artifact upload excludes the dotfile ledger unless hidden files are explicitly included"
+    );
+}
+
+#[test]
 fn validator_builds_the_ratchet_from_base_controlled_source() {
     let workflow = fs::read_to_string(".github/workflows/ledger.yml").unwrap();
 
