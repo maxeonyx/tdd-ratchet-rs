@@ -330,7 +330,7 @@ fn help_flag_prints_usage_without_running_ratchet() {
 
     let (ok, out) = run_ratchet_args(dir.path(), &["--help"]);
     assert!(ok, "--help should succeed: {out}");
-    assert!(out.contains("Usage: cargo ratchet [--init] [--help] [--version]"));
+    assert!(out.contains("Usage: cargo ratchet [--init] [--help] [--version [--json]]"));
     assert!(
         out.contains("New tests must fail in one committed run before they are allowed to pass")
     );
@@ -349,11 +349,12 @@ fn help_flag_prints_usage_without_running_ratchet() {
 fn help_output_is_complete_and_stable() {
     let dir = TestDir::new();
 
-    let output = run_ratchet_output(dir.path(), &["--help"]);
-
-    assert!(output.status.success());
-    assert_eq!(String::from_utf8_lossy(&output.stdout), EXPECTED_HELP);
-    assert!(output.stderr.is_empty());
+    for args in [&["--help"][..], &["ratchet", "--help"][..]] {
+        let output = run_ratchet_output(dir.path(), args);
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout), EXPECTED_HELP);
+        assert!(output.stderr.is_empty());
+    }
     assert!(!dir.path().join(".test-status.json").exists());
     dir.pass();
 }
@@ -402,6 +403,16 @@ fn init_preserves_nextest_failure_and_does_not_write_ledger() {
         !dir.path().join(".test-status.json").exists(),
         "a failed test run must not create the trusted ledger"
     );
+
+    let ordinary_output = run_ratchet_output(dir.path(), &[]);
+    let ordinary_stderr = String::from_utf8_lossy(&ordinary_output.stderr);
+    assert!(!ordinary_output.status.success());
+    assert!(ordinary_stderr.contains("could not find `Cargo.toml`"));
+    assert!(
+        !ordinary_stderr.contains("gatekeeper"),
+        "a runner failure must not be misreported as a derived ratchet violation: {ordinary_stderr}"
+    );
+    assert!(!dir.path().join(".test-status.json").exists());
     dir.pass();
 }
 

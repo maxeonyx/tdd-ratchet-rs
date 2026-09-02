@@ -23,6 +23,7 @@ pub enum TestOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandOutput {
     pub success: bool,
+    pub code: Option<i32>,
     pub status: String,
     pub stdout: String,
     pub stderr: String,
@@ -39,6 +40,7 @@ impl CommandExecutor for ProcessExecutor {
         let output = command.output()?;
         Ok(CommandOutput {
             success: output.status.success(),
+            code: output.status.code(),
             status: output.status.to_string(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -112,8 +114,11 @@ pub fn run_nextest_with_executor(
     let mut command = nextest_command(project_dir);
     let output = executor.output(&mut command).map_err(NextestError::Start)?;
 
-    // The status check is intentionally introduced by the green commit. This
-    // refactor first exposes the process boundary without changing behavior.
+    let tests_completed = output.success || matches!(output.code, Some(4 | 100));
+    if !tests_completed {
+        return Err(NextestError::Failed(output));
+    }
+
     Ok(TestRun {
         results: parse_nextest_output(&output.stdout),
         stderr: output.stderr,

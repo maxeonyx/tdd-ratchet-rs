@@ -26,6 +26,7 @@ impl CommandExecutor for FakeExecutor {
 fn failed_nextest_status_preserves_process_evidence() {
     let expected = CommandOutput {
         success: false,
+        code: Some(101),
         status: "exit status: 101".into(),
         stdout: "partial structured output\n".into(),
         stderr: "error: could not find Cargo.toml\n".into(),
@@ -37,9 +38,27 @@ fn failed_nextest_status_preserves_process_evidence() {
     let error = run_nextest_with_executor(Path::new("."), &mut executor)
         .expect_err("a failed test runner must not become an empty successful run");
 
+    assert_eq!(
+        error.to_string(),
+        "`cargo nextest` failed (exit status: 101)\npartial structured output\nerror: could not find Cargo.toml\n"
+    );
     match error {
         NextestError::Failed(output) => assert_eq!(output, expected),
         other => panic!("expected failed process evidence, got {other:?}"),
+    }
+
+    for code in [4, 100] {
+        let mut executor = FakeExecutor {
+            output: Some(CommandOutput {
+                success: false,
+                code: Some(code),
+                status: format!("exit status: {code}"),
+                stdout: String::new(),
+                stderr: String::new(),
+            }),
+        };
+        run_nextest_with_executor(Path::new("."), &mut executor)
+            .unwrap_or_else(|error| panic!("nextest code {code} completed a test run: {error}"));
     }
 }
 

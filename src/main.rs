@@ -11,7 +11,15 @@ use tdd_ratchet::ratchet::evaluate;
 use tdd_ratchet::runner::{TestOutcome, TestResult, run_nextest as execute_nextest};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 
-const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version]\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help          Print help\n  --version       Print version\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n";
+const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version [--json]]\n\nPrerequisite:\n  cargo-nextest must be installed and available as `cargo nextest`.\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help, -h      Print help\n  --version, -V   Print version; combine with --json for machine-readable metadata\n  --json          Format --version output as JSON\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n  $ cargo ratchet --version --json  # Print machine-readable version metadata\n";
+
+#[derive(Clone, Copy)]
+enum CliAction {
+    Run,
+    Init,
+    Help,
+    Version { json: bool },
+}
 
 struct GatheredRun {
     status: TrackedStatus,
@@ -21,24 +29,30 @@ struct GatheredRun {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    let action = parse_cli(&args).unwrap_or_else(|message| {
+        eprintln!("tdd-ratchet: {message}");
+        eprintln!("Run `cargo ratchet --help` for usage.");
+        process::exit(2);
+    });
 
-    if is_version_json_request(&args[1..]) {
-        println!(
-            "{{\"package\":\"tdd-ratchet\",\"binary\":\"cargo-ratchet\",\"version\":\"{}\"}}",
-            env!("CARGO_PKG_VERSION")
-        );
-        return;
-    }
-
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        print!("{HELP_TEXT}");
-        return;
-    }
-
-    if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("cargo-ratchet {}", env!("CARGO_PKG_VERSION"));
-        return;
+    match action {
+        CliAction::Help => {
+            print!("{HELP_TEXT}");
+            return;
+        }
+        CliAction::Version { json: true } => {
+            println!(
+                "{{\"package\":\"tdd-ratchet\",\"binary\":\"cargo-ratchet\",\"version\":\"{}\"}}",
+                env!("CARGO_PKG_VERSION")
+            );
+            return;
+        }
+        CliAction::Version { json: false } => {
+            println!("cargo-ratchet {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        CliAction::Run | CliAction::Init => {}
     }
 
     let project_dir = env::current_dir().unwrap_or_else(|e| {
@@ -48,7 +62,7 @@ fn main() {
 
     let status_path = project_dir.join(".test-status.json");
 
-    if args.iter().any(|a| a == "--init") {
+    if matches!(action, CliAction::Init) {
         init(&status_path, &project_dir);
         return;
     }
@@ -56,13 +70,39 @@ fn main() {
     run_ratchet(&project_dir, &status_path);
 }
 
-fn is_version_json_request(args: &[String]) -> bool {
-    args.iter()
-        .any(|arg| matches!(arg.as_str(), "--version" | "-V"))
-        && args.iter().any(|arg| arg == "--json")
-        && args
-            .iter()
-            .all(|arg| matches!(arg.as_str(), "--version" | "-V" | "--json"))
+fn parse_cli(args: &[String]) -> Result<CliAction, String> {
+    let args = if args.first().is_some_and(|arg| arg == "ratchet") {
+        &args[1..]
+    } else {
+        args
+    };
+
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] => Ok(CliAction::Run),
+        ["--init"] => Ok(CliAction::Init),
+        ["--help"] | ["-h"] => Ok(CliAction::Help),
+        ["--version"] | ["-V"] => Ok(CliAction::Version { json: false }),
+        ["--version", "--json"] | ["-V", "--json"] | ["--json", "--version"] | ["--json", "-V"] => {
+            Ok(CliAction::Version { json: true })
+        }
+        _ => {
+            if let Some(arg) = args.iter().find(|arg| {
+                !matches!(
+                    arg.as_str(),
+                    "--init" | "--help" | "-h" | "--version" | "-V" | "--json"
+                )
+            }) {
+                Err(format!("unrecognized option `{arg}`"))
+            } else {
+                Err(format!("invalid option combination `{}`", args.join(" ")))
+            }
+        }
+    }
 }
 
 fn init(status_path: &Path, project_dir: &Path) {
@@ -87,7 +127,8 @@ fn init(status_path: &Path, project_dir: &Path) {
     let mut status = StatusFile::empty();
 
     // Run tests and snapshot existing results into the status file
-    status.tests = status_entries_from_results(&run_nextest(project_dir, false));
+    status.tests =
+        status_entries_from_results(&run_nextest(project_dir, false, "cargo ratchet --init"));
 
     status.write_to_path(status_path).unwrap_or_else(|e| {
         eprintln!("tdd-ratchet: failed to create status file: {e}");
@@ -143,7 +184,7 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
 fn gather_run(project_dir: &Path) -> GatheredRun {
     let status = load_committed_status_input(project_dir).into_tracked_status();
     let instructions = load_working_tree_instructions(project_dir);
-    let results = run_nextest(project_dir, true);
+    let results = run_nextest(project_dir, true, "cargo ratchet");
     let history_violations = check_history(project_dir).unwrap_or_else(|e| {
         print_actionable_git_error("failed to inspect git history", &e);
         process::exit(1);
@@ -228,9 +269,12 @@ fn status_entries_from_results(results: &[TestResult]) -> BTreeMap<String, TestS
         .collect()
 }
 
-fn run_nextest(project_dir: &Path, inherit_stderr: bool) -> Vec<TestResult> {
+fn run_nextest(project_dir: &Path, inherit_stderr: bool, retry_command: &str) -> Vec<TestResult> {
     let run = execute_nextest(project_dir).unwrap_or_else(|error| {
         eprintln!("tdd-ratchet: {error}");
+        eprintln!(
+            "What to do: Fix the Cargo or Nextest error above, then rerun `{retry_command}`."
+        );
         process::exit(1);
     });
 
