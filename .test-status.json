@@ -22,6 +22,7 @@
     "tdd-ratchet::end_to_end$removal_requests_are_read_from_the_separate_instruction_file": "passing",
     "tdd-ratchet::end_to_end$rename_commit_transfers_test_identity": "passing",
     "tdd-ratchet::end_to_end$rename_is_rejected_when_old_name_still_appears_in_results": "passing",
+    "tdd-ratchet::end_to_end$result_preservation_exceptions_are_rejected_before_project_inspection": "pending",
     "tdd-ratchet::end_to_end$running_in_repo_without_commits_shows_init_guidance": "passing",
     "tdd-ratchet::end_to_end$running_outside_git_repo_shows_actionable_error": "passing",
     "tdd-ratchet::end_to_end$stale_rename_mapping_warns_but_does_not_fail": "passing",
