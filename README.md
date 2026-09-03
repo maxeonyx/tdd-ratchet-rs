@@ -31,6 +31,8 @@ cargo ratchet --help
 cargo ratchet --version
 ```
 
+Trusted automation that cannot observe a required external dependency may preserve an exact result already recorded as passing with `--preserve-passing <TEST>`. The flag is repeatable, keeps the test present as ignored for this run, and rejects pending, unknown, absent, or duplicate names. Keep this allowlist in reviewed workflow source; it is not a way to accept new or regressed behavior.
+
 Use `cargo ratchet --init` once, before enabling the trusted ledger workflow, to create the repository's adoption snapshot. After adoption, treat `.test-status.json` as bot-written output: commit test and implementation changes separately, push each state to a pull request, and wait for the trusted ledger workflow to record `pending` before implementing and `passing` afterward.
 
 Declare a deliberate rename or removal in `.tdd-ratchet.json`. The ratchet validates that instruction, records any rename bridge in the ledger, and keeps removals out of the ledger schema. Remove the instruction file after the bot records the transition.

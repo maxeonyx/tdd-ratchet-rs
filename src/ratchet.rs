@@ -36,11 +36,46 @@ pub struct EvalResult {
 /// the current runner. The command-line boundary supplies the trusted allowlist;
 /// this pure function validates it before rewriting those outcomes as ignored.
 pub fn preserve_passing_results(
-    _status: &TrackedStatus,
+    status: &TrackedStatus,
     results: &[TestResult],
-    _preserved_tests: &[String],
+    preserved_tests: &[String],
 ) -> Result<Vec<TestResult>, Vec<String>> {
-    Ok(results.to_vec())
+    let result_names = observed_test_names(results);
+    let mut requested = BTreeSet::new();
+    let mut errors = Vec::new();
+
+    for test in preserved_tests {
+        if !requested.insert(test.as_str()) {
+            errors.push(format!("duplicate preserved test `{test}`"));
+            continue;
+        }
+        match status.tests.get(test) {
+            None => errors.push(format!("`{test}` is not tracked")),
+            Some(TestState::Pending) => errors.push(format!(
+                "`{test}` is pending; only earned passing states can be preserved"
+            )),
+            Some(TestState::Passing) if !result_names.contains(test.as_str()) => {
+                errors.push(format!("`{test}` is not present in the current test run"));
+            }
+            Some(TestState::Passing) => {}
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(results
+        .iter()
+        .map(|result| TestResult {
+            name: result.name.clone(),
+            outcome: if requested.contains(result.name.as_str()) {
+                TestOutcome::Ignored
+            } else {
+                result.outcome
+            },
+        })
+        .collect())
 }
 
 /// A unified violation type covering all ratchet checks.

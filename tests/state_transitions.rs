@@ -128,6 +128,16 @@ fn trusted_runner_can_preserve_only_exact_already_passing_results() {
 
     let unknown = preserve_passing_results(&tracked, &tr, &["not_in_the_run".to_string()]);
     assert!(unknown.is_err(), "unknown results must never be preserved");
+
+    let duplicate = preserve_passing_results(
+        &tracked,
+        &tr,
+        &["external_policy".to_string(), "external_policy".to_string()],
+    );
+    assert!(
+        duplicate.is_err(),
+        "duplicate preservation requests must be rejected"
+    );
 }
 
 // --- Story 7: Tracked tests must not disappear ---
