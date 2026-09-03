@@ -376,6 +376,44 @@ fn unknown_option_is_rejected_before_project_inspection() {
 }
 
 #[test]
+fn trusted_runner_can_preserve_an_unobservable_passing_test() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    add_gatekeeper(dir.path());
+    set_test_file(
+        dir.path(),
+        "external_policy.rs",
+        "#[test]\nfn external_policy() {}\n",
+    );
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "initial adoption should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt the passing external policy");
+
+    set_test_file(
+        dir.path(),
+        "external_policy.rs",
+        "#[test]\nfn external_policy() { panic!(\"credential unavailable\"); }\n",
+    );
+    git_add_commit(dir.path(), "Run without the external credential");
+
+    let (ok, out) = run_ratchet_args(
+        dir.path(),
+        &[
+            "--preserve-passing",
+            "test-project::external_policy$external_policy",
+        ],
+    );
+    assert!(ok, "trusted preservation should succeed: {out}");
+    let ledger = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        ledger.contains("\"test-project::external_policy$external_policy\": \"passing\""),
+        "the trusted ledger state should be preserved: {ledger}"
+    );
+    dir.pass();
+}
+
+#[test]
 fn init_preserves_nextest_failure_and_does_not_write_ledger() {
     let dir = TestDir::new();
     create_test_project(dir.path());
