@@ -18,10 +18,9 @@ fn help_examples() {
             fixture.env("PATH", std::env::var("PATH").expect("PATH should exist"));
             fixture.env("GIT_CONFIG_NOSYSTEM", "1");
             fixture.env("OPENSSL_NO_VENDOR", "1");
-            fixture.env(
-                "RUSTUP_HOME",
-                std::env::var("RUSTUP_HOME").expect("RUSTUP_HOME should exist for help tests"),
-            );
+            if let Ok(rustup_home) = std::env::var("RUSTUP_HOME") {
+                fixture.env("RUSTUP_HOME", rustup_home);
+            }
             fixture.env(
                 "CARGO_HOME",
                 std::env::var("CARGO_HOME").unwrap_or_else(|_| {

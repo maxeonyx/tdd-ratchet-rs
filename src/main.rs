@@ -7,15 +7,14 @@ use tdd_ratchet::errors::format_report;
 use tdd_ratchet::history::{
     HistoryViolation, check_history, collect_history_snapshots, read_head_status,
 };
-use tdd_ratchet::ratchet::evaluate;
+use tdd_ratchet::ratchet::{evaluate, preserve_passing_results};
 use tdd_ratchet::runner::{TestOutcome, TestResult, run_nextest as execute_nextest};
 use tdd_ratchet::status::{StatusFile, TestState, TrackedStatus, WorkingTreeInstructions};
 
-const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version [--json]]\n\nPrerequisite:\n  cargo-nextest must be installed and available as `cargo nextest`.\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help, -h      Print help\n  --version, -V   Print version; combine with --json for machine-readable metadata\n  --json          Format --version output as JSON\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n  $ cargo ratchet --version --json  # Print machine-readable version metadata\n";
+const HELP_TEXT: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version [--json]] [--preserve-passing <TEST>]...\n\nPrerequisite:\n  cargo-nextest must be installed and available as `cargo nextest`.\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init                    Create the one-time adoption snapshot before enabling the trusted workflow\n  --help, -h                Print help\n  --version, -V             Print version; combine with --json for machine-readable metadata\n  --json                    Format --version output as JSON\n  --preserve-passing TEST   Preserve an exact already-passing result that this runner cannot observe; repeatable\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n  $ cargo ratchet --version --json  # Print machine-readable version metadata\n";
 
-#[derive(Clone, Copy)]
 enum CliAction {
-    Run,
+    Run { preserved_tests: Vec<String> },
     Init,
     Help,
     Version { json: bool },
@@ -36,7 +35,7 @@ fn main() {
         process::exit(2);
     });
 
-    match action {
+    match &action {
         CliAction::Help => {
             print!("{HELP_TEXT}");
             return;
@@ -52,7 +51,7 @@ fn main() {
             println!("cargo-ratchet {}", env!("CARGO_PKG_VERSION"));
             return;
         }
-        CliAction::Run | CliAction::Init => {}
+        CliAction::Run { .. } | CliAction::Init => {}
     }
 
     let project_dir = env::current_dir().unwrap_or_else(|e| {
@@ -62,12 +61,15 @@ fn main() {
 
     let status_path = project_dir.join(".test-status.json");
 
-    if matches!(action, CliAction::Init) {
+    if matches!(&action, CliAction::Init) {
         init(&status_path, &project_dir);
         return;
     }
 
-    run_ratchet(&project_dir, &status_path);
+    let CliAction::Run { preserved_tests } = action else {
+        unreachable!("non-run actions returned before project execution")
+    };
+    run_ratchet(&project_dir, &status_path, &preserved_tests);
 }
 
 fn parse_cli(args: &[String]) -> Result<CliAction, String> {
@@ -77,13 +79,31 @@ fn parse_cli(args: &[String]) -> Result<CliAction, String> {
         args
     };
 
+    if args.iter().any(|arg| arg == "--preserve-passing") {
+        let mut preserved_tests = Vec::new();
+        let mut index = 0;
+        while index < args.len() {
+            if args[index] != "--preserve-passing" {
+                return Err(format!("unrecognized option `{}`", args[index]));
+            }
+            let Some(test) = args.get(index + 1) else {
+                return Err("`--preserve-passing` requires an exact test name".to_string());
+            };
+            preserved_tests.push(test.clone());
+            index += 2;
+        }
+        return Ok(CliAction::Run { preserved_tests });
+    }
+
     match args
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>()
         .as_slice()
     {
-        [] => Ok(CliAction::Run),
+        [] => Ok(CliAction::Run {
+            preserved_tests: Vec::new(),
+        }),
         ["--init"] => Ok(CliAction::Init),
         ["--help"] | ["-h"] => Ok(CliAction::Help),
         ["--version"] | ["-V"] => Ok(CliAction::Version { json: false }),
@@ -148,8 +168,8 @@ fn init(status_path: &Path, project_dir: &Path) {
     println!("tdd-ratchet: initialized .test-status.json ({passing} passing, {pending} pending)");
 }
 
-fn run_ratchet(project_dir: &Path, status_path: &Path) {
-    let gathered = gather_run(project_dir);
+fn run_ratchet(project_dir: &Path, status_path: &Path, preserved_tests: &[String]) {
+    let gathered = gather_run(project_dir, preserved_tests);
 
     // ── Phase 2: Evaluate (pure) ────────────────────────────────────
     let result = evaluate(
@@ -181,10 +201,24 @@ fn run_ratchet(project_dir: &Path, status_path: &Path) {
     }
 }
 
-fn gather_run(project_dir: &Path) -> GatheredRun {
+fn gather_run(project_dir: &Path, preserved_tests: &[String]) -> GatheredRun {
     let status = load_committed_status_input(project_dir).into_tracked_status();
     let instructions = load_working_tree_instructions(project_dir);
-    let results = run_nextest(project_dir, true, "cargo ratchet");
+    let observed_results = run_nextest(project_dir, true, "cargo ratchet");
+    let results = preserve_passing_results(&status, &observed_results, preserved_tests)
+        .unwrap_or_else(|errors| {
+            eprintln!("tdd-ratchet: invalid --preserve-passing request:");
+            for error in errors {
+                eprintln!("  - {error}");
+            }
+            eprintln!(
+                "What to do: Name each result exactly as it appears in .test-status.json, and preserve only tests that are already tracked as passing but cannot observe a required external dependency in this runner."
+            );
+            process::exit(2);
+        });
+    for test in preserved_tests {
+        eprintln!("tdd-ratchet: preserving unobservable passing result `{test}`");
+    }
     let history_violations = check_history(project_dir).unwrap_or_else(|e| {
         print_actionable_git_error("failed to inspect git history", &e);
         process::exit(1);

@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const EXPECTED_HELP: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version [--json]]\n\nPrerequisite:\n  cargo-nextest must be installed and available as `cargo nextest`.\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init          Create the one-time adoption snapshot before enabling the trusted workflow\n  --help, -h      Print help\n  --version, -V   Print version; combine with --json for machine-readable metadata\n  --json          Format --version output as JSON\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n  $ cargo ratchet --version --json  # Print machine-readable version metadata\n";
+const EXPECTED_HELP: &str = "tdd-ratchet enforces strict TDD for Rust projects. New tests must fail in one committed run before they are allowed to pass in a later committed run, using the trusted `.test-status.json` ledger plus git history as the record.\n\nUsage: cargo ratchet [--init] [--help] [--version [--json]] [--preserve-passing <TEST>]...\n\nPrerequisite:\n  cargo-nextest must be installed and available as `cargo nextest`.\n\nWithout flags, cargo ratchet runs `cargo nextest`, compares the results with the committed ledger, enforces the pending→passing workflow, and writes a preview to `.test-status.json`. On pull requests, the trusted ledger workflow validates and commits that output; developers do not hand-edit it.\n\nOptions:\n  --init                    Create the one-time adoption snapshot before enabling the trusted workflow\n  --help, -h                Print help\n  --version, -V             Print version; combine with --json for machine-readable metadata\n  --json                    Format --version output as JSON\n  --preserve-passing TEST   Preserve an exact already-passing result that this runner cannot observe; repeatable\n\nExamples:\n  $ cargo ratchet --init            # Bootstrap the adoption snapshot once\n  $ cargo ratchet                   # Run tests with ratchet enforcement\n  $ cargo ratchet --version --json  # Print machine-readable version metadata\n";
 
 fn cargo_bin() -> PathBuf {
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_cargo-ratchet") {
@@ -330,7 +330,9 @@ fn help_flag_prints_usage_without_running_ratchet() {
 
     let (ok, out) = run_ratchet_args(dir.path(), &["--help"]);
     assert!(ok, "--help should succeed: {out}");
-    assert!(out.contains("Usage: cargo ratchet [--init] [--help] [--version [--json]]"));
+    assert!(out.contains(
+        "Usage: cargo ratchet [--init] [--help] [--version [--json]] [--preserve-passing <TEST>]..."
+    ));
     assert!(
         out.contains("New tests must fail in one committed run before they are allowed to pass")
     );
@@ -372,6 +374,44 @@ fn unknown_option_is_rejected_before_project_inspection() {
         "tdd-ratchet: unrecognized option `--not-a-real-option`\nRun `cargo ratchet --help` for usage.\n"
     );
     assert!(!dir.path().join(".test-status.json").exists());
+    dir.pass();
+}
+
+#[test]
+fn trusted_runner_can_preserve_an_unobservable_passing_test() {
+    let dir = TestDir::new();
+    create_test_project(dir.path());
+    add_gatekeeper(dir.path());
+    set_test_file(
+        dir.path(),
+        "external_policy.rs",
+        "#[test]\nfn external_policy() {}\n",
+    );
+
+    let (ok, out) = run_ratchet_init(dir.path());
+    assert!(ok, "initial adoption should succeed: {out}");
+    git_add_commit(dir.path(), "Adopt the passing external policy");
+
+    set_test_file(
+        dir.path(),
+        "external_policy.rs",
+        "#[test]\nfn external_policy() { panic!(\"credential unavailable\"); }\n",
+    );
+    git_add_commit(dir.path(), "Run without the external credential");
+
+    let (ok, out) = run_ratchet_args(
+        dir.path(),
+        &[
+            "--preserve-passing",
+            "test-project::external_policy$external_policy",
+        ],
+    );
+    assert!(ok, "trusted preservation should succeed: {out}");
+    let ledger = fs::read_to_string(dir.path().join(".test-status.json")).unwrap();
+    assert!(
+        ledger.contains("\"test-project::external_policy$external_policy\": \"passing\""),
+        "the trusted ledger state should be preserved: {ledger}"
+    );
     dir.pass();
 }
 
