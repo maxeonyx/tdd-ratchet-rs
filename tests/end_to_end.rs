@@ -378,6 +378,25 @@ fn unknown_option_is_rejected_before_project_inspection() {
 }
 
 #[test]
+fn result_preservation_exceptions_are_rejected_before_project_inspection() {
+    let dir = TestDir::new();
+
+    let output = run_ratchet_output(
+        dir.path(),
+        &["--preserve-passing", "test-project::policy$external_policy"],
+    );
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "tdd-ratchet: unrecognized option `--preserve-passing`\nRun `cargo ratchet --help` for usage.\n"
+    );
+    assert!(!dir.path().join(".test-status.json").exists());
+    dir.pass();
+}
+
+#[test]
 fn trusted_runner_can_preserve_an_unobservable_passing_test() {
     let dir = TestDir::new();
     create_test_project(dir.path());
