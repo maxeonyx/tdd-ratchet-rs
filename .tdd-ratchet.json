@@ -1,0 +1,6 @@
+{
+  "removals": [
+    "tdd-ratchet::end_to_end$trusted_runner_can_preserve_an_unobservable_passing_test",
+    "tdd-ratchet::state_transitions$trusted_runner_can_preserve_only_exact_already_passing_results"
+  ]
+}
