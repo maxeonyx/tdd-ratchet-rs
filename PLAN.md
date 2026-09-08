@@ -25,7 +25,7 @@
 
 15. ~~As a user of tdd-ratchet, I want to intentionally remove tests without the ratchet blocking me. A `removals` list in `.tdd-ratchet.json` declares test names to retire. The ratchet validates each removal, removes the entry from generated ledger output, and rejects undeclared disappearances as before.~~ ✅
 16. ~~As a user of tdd-ratchet, I want failed Cargo/Nextest execution and invalid CLI options rejected before the trusted ledger is evaluated or written, with the original process evidence and relevant recovery preserved.~~ ✅
-17. ~~As a trusted automation author, I want an exact allowlist for already-passing tests whose external dependencies cannot be observed in a least-privilege runner, so their earned state is preserved without allowing pending, unknown, absent, or duplicate results to bypass the ratchet.~~ ✅
+17. ~~As a user of tdd-ratchet, I want every observed failure to remain a failure, with no runner-specific result-preservation escape hatch; external evidence that a safe runner cannot observe belongs in a separate attestation system.~~ ✅
 
 ### Developer stories
 
@@ -85,7 +85,6 @@ The `renames` mapping bridges new name → old name and is copied into successfu
    - `pending` test that still fails → ok
    - `passing` test that still passes → ok
    - `passing` test that now fails → **reject** (regression)
-   - Exact `passing` result named by reviewed automation with `--preserve-passing` → treat as observed but ignored for this run; reject any name that is not present and already passing
    - Test in status file but not in run → **reject** (silent removal), unless declared in `removals` (story 15)
 4. Inspect git history to verify no test skipped the `pending` state
 5. Write a local `.test-status.json` preview; on pull requests, the isolated trusted writer validates and commits it
@@ -102,8 +101,6 @@ The ratchet needs per-test pass/fail results. `cargo test` verbose output prints
 The first committed `.test-status.json` is the repository's one adoption snapshot. Tests already present there are trusted; every later test must appear as `pending` before `passing`. There is no movable baseline field and no second adoption. Deleting the ledger, recreating it, rewriting `passing` to `pending`, or removing an old violation does not repair history; only rewriting the offending commits does.
 
 The ratchet reads tracked state from committed history and writes a local preview. On same-repository pull requests, an unprivileged validation job builds the enforcing binary from base-controlled source, runs it against a separate pull-request checkout, and uploads only the preview. A separate writer job, without a source checkout, revalidates transition semantics and commits exactly `.test-status.json` against the verified head. Ordinary pull-request commits that touch the ledger are rejected. Developer rename and removal intent comes from `.tdd-ratchet.json`. Fork commits must be moved onto a maintainer-controlled repository branch before this writer runs.
-
-Some automated concerns depend on external metadata that a least-privilege pull-request token cannot observe. Reviewed trusted automation may repeat `--preserve-passing <TEST>` for exact results that are both present in the current run and already recorded as passing. The ratchet rewrites only those current outcomes to ignored, preserves their earned state, and rejects pending, unknown, absent, or duplicate requests. This is a runner-specific observability declaration, not a developer-owned ledger transition.
 
 ### Bypass prevention discussion
 

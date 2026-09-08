@@ -25,8 +25,9 @@ The repository-serialized run records the required `Ready` check, builds the rel
 1. **One story at a time.** Pick the next story from PLAN.md.
 2. **Failing test first, separate commit.** Write the test, run it, confirm it fails for the right reason, commit.
 3. **Implement to make it pass.** Commit when green.
-4. **Update PLAN.md** after completing each story.
-5. **Commit and push frequently.**
+4. **Retiring a test.** Name it under `removals` in `.tdd-ratchet.json` and commit that alongside the deletion. The ledger bot consumes the instruction in a single run, so delete `.tdd-ratchet.json` in the next commit; a leftover instruction fails every later ratchet run with `removal target is not present in committed status`.
+5. **Update PLAN.md** after completing each story.
+6. **Commit and push frequently.**
 
 ## Test isolation
 

@@ -2,7 +2,7 @@
 //
 // Stories 5, 6, 7: The core ratchet rules.
 
-use tdd_ratchet::ratchet::{RatchetViolation, check_ratchet, evaluate, preserve_passing_results};
+use tdd_ratchet::ratchet::{RatchetViolation, check_ratchet, evaluate};
 use tdd_ratchet::runner::{TestOutcome, TestResult};
 use tdd_ratchet::status::{StatusFile, TestState, WorkingTreeInstructions};
 
@@ -103,40 +103,6 @@ fn passing_test_now_fails_is_rejected() {
             .any(|v| matches!(v, RatchetViolation::Regression { .. })),
         "Should reject regression: {:?}",
         outcome.violations
-    );
-}
-
-#[test]
-fn trusted_runner_can_preserve_only_exact_already_passing_results() {
-    let sf = status(&[
-        ("external_policy", TestState::Passing),
-        ("unfinished", TestState::Pending),
-    ]);
-    let tr = results(&[
-        ("external_policy", TestOutcome::Failed),
-        ("unfinished", TestOutcome::Failed),
-    ]);
-    let tracked = sf.into_tracked_status();
-
-    let rewritten = preserve_passing_results(&tracked, &tr, &["external_policy".to_string()])
-        .expect("an exact passing test should be preservable");
-    assert_eq!(rewritten[0].outcome, TestOutcome::Ignored);
-    assert_eq!(rewritten[1].outcome, TestOutcome::Failed);
-
-    let pending = preserve_passing_results(&tracked, &tr, &["unfinished".to_string()]);
-    assert!(pending.is_err(), "pending results must never be preserved");
-
-    let unknown = preserve_passing_results(&tracked, &tr, &["not_in_the_run".to_string()]);
-    assert!(unknown.is_err(), "unknown results must never be preserved");
-
-    let duplicate = preserve_passing_results(
-        &tracked,
-        &tr,
-        &["external_policy".to_string(), "external_policy".to_string()],
-    );
-    assert!(
-        duplicate.is_err(),
-        "duplicate preservation requests must be rejected"
     );
 }
 
