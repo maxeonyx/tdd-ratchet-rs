@@ -8,7 +8,7 @@ Read [VISION.md](VISION.md) for what tdd-ratchet does and why. Read [PLAN.md](PL
 
 Run `cargo ratchet`, not plain `cargo test`. A new test must be red when first introduced and recorded as `pending`; that expected red test keeps CI green. A new test must not pass when first introduced—doing so makes the ratchet and CI red. Commit and push the red test, wait for the trusted ledger workflow's bot commit, then implement, rerun the ratchet, and push the green implementation so the bot can record the promotion to `passing`.
 
-During tdd-ratchet development, use `TDD_RATCHET=1 cargo test` until the binary is built, then dogfood `cargo ratchet`.
+During tdd-ratchet development, use `TDD_RATCHET=1 cargo test` until the binary is built, then dogfood `cargo ratchet`. The devenv provides `cargo-ratchet` as a shim that builds and runs this working tree, so the gate is always the ratchet you are changing — outside the devenv, `cargo ratchet` is whatever version happens to be installed, which can report green on rules this repository no longer holds.
 
 ## Integration workflow
 
