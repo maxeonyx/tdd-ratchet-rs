@@ -2,6 +2,12 @@
 
 {
   packages = [
+    # `cargo ratchet` must be this working tree's ratchet, not whatever
+    # cargo-ratchet an agent or developer happens to have installed: a stale
+    # binary would validate this repository against its own older rules.
+    (pkgs.writeShellScriptBin "cargo-ratchet" ''
+      exec cargo run --quiet --manifest-path "$DEVENV_ROOT/Cargo.toml" -- "$@"
+    '')
     pkgs.actionlint
     pkgs.cargo
     pkgs.cargo-nextest
