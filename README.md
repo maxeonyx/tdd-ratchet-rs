@@ -11,17 +11,19 @@ See [VISION.md](VISION.md) for full requirements and [PLAN.md](PLAN.md) for stor
 ## Install
 
 ```
-cargo install tdd-ratchet
-```
-
-This installs the `cargo-ratchet` binary, enabling `cargo ratchet` as a subcommand.
-
-Alternative (bare binary release):
-
-```
 curl -Lo ~/.local/bin/cargo-ratchet https://tdd-ratchet.maxeonyx.com/releases/cargo-ratchet-x86_64-linux
 chmod +x ~/.local/bin/cargo-ratchet
 ```
+
+This installs the latest release of the `cargo-ratchet` binary, enabling `cargo ratchet` as a subcommand.
+
+Alternative (build from source):
+
+```
+cargo install --git https://github.com/maxeonyx/tdd-ratchet-rs --locked
+```
+
+The `tdd-ratchet` crate on crates.io is an unmaintained 0.1.0; `cargo install tdd-ratchet` installs that, not the current release.
 
 ## Usage
 

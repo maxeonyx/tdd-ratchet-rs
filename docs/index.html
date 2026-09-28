@@ -202,11 +202,11 @@ git add src && git commit -m "feat: implement the behavior"
 git push</code></pre>
 
     <h2>Install</h2>
-<pre class="codeblock-wide"><code>cargo install tdd-ratchet</code></pre>
-    <p class="install-note">Alternative (bare binary release):</p>
-<pre class="codeblock-wide"><code><span style="color:var(--comment)"># Linux x86_64</span>
+<pre class="codeblock-wide"><code><span style="color:var(--comment)"># Linux x86_64, latest release</span>
 curl -Lo ~/.local/bin/cargo-ratchet https://tdd-ratchet.maxeonyx.com/releases/cargo-ratchet-x86_64-linux
 chmod +x ~/.local/bin/cargo-ratchet</code></pre>
+    <p class="install-note">Alternative (build from source; the crates.io <code>tdd-ratchet</code> is an old 0.1.0):</p>
+<pre class="codeblock-wide"><code>cargo install --git https://github.com/maxeonyx/tdd-ratchet-rs --locked</code></pre>
     <p>Then initialize:</p>
 <pre><code>cargo ratchet --init</code></pre>
 
